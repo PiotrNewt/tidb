@@ -78,19 +78,25 @@ func (e *AnalyzeExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	if err != nil {
 		return err
 	}
+	// 定义任务chan 和 结果chan
 	taskCh := make(chan *analyzeTask, len(e.tasks))
-	resultCh := make(chan analyzeResult, len(e.tasks))
+	resultCh := make(chan analyzeResult, len(e.tasks)) // 如果需要加采样需要修改 analyzeResult
+
 	e.wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
 		go e.analyzeWorker(taskCh, resultCh, i == 0)
 	}
+	// 对每一个 task 添加一个 analyze job
 	for _, task := range e.tasks {
 		statistics.AddNewAnalyzeJob(task.job)
 	}
+	// 将每一个 task 传入任务队列中
 	for _, task := range e.tasks {
 		taskCh <- task
 	}
 	close(taskCh)
+
+	// domain 表示一个存储空间（不同的存储空间可以对应相同的数据库名称）
 	statsHandle := domain.GetDomain(e.ctx).StatsHandle()
 	panicCnt := 0
 	for panicCnt < concurrency {
@@ -98,6 +104,7 @@ func (e *AnalyzeExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		if !ok {
 			break
 		}
+		// 如果结果出错，则记录错误信息并continue
 		if result.Err != nil {
 			err = result.Err
 			if err == errAnalyzeWorkerPanic {
@@ -108,7 +115,10 @@ func (e *AnalyzeExec) Next(ctx context.Context, req *chunk.Chunk) error {
 			result.job.Finish(true)
 			continue
 		}
+
+		// 将所有统计信息持久化
 		for i, hg := range result.Hist {
+			// 调用一个 sqlexce，通过写 sql 执行持久化操作
 			err1 := statsHandle.SaveStatsToStorage(result.PhysicalTableID, result.Count, result.IsIndex, hg, result.Cms[i], 1)
 			if err1 != nil {
 				err = err1
@@ -119,12 +129,14 @@ func (e *AnalyzeExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		}
 		result.job.Finish(false)
 	}
+
 	for _, task := range e.tasks {
 		statistics.MoveToHistory(task.job)
 	}
 	if err != nil {
 		return err
 	}
+	// 读取统计信息元数据并更新统计信息映射（更新缓存）
 	return statsHandle.Update(GetInfoSchema(e.ctx))
 }
 
@@ -138,6 +150,7 @@ func getBuildStatsConcurrency(ctx sessionctx.Context) (int, error) {
 	return int(c), err
 }
 
+// 统计分析 task 的枚举类型
 type taskType int
 
 const (
@@ -160,6 +173,7 @@ type analyzeTask struct {
 
 var errAnalyzeWorkerPanic = errors.New("analyze worker panic")
 
+// 一个 analyzeWorker 执行
 func (e *AnalyzeExec) analyzeWorker(taskCh <-chan *analyzeTask, resultCh chan<- analyzeResult, isCloseChanThread bool) {
 	var task *analyzeTask
 	defer func() {
@@ -175,11 +189,13 @@ func (e *AnalyzeExec) analyzeWorker(taskCh <-chan *analyzeTask, resultCh chan<- 
 			}
 		}
 		e.wg.Done()
+
 		if isCloseChanThread {
 			e.wg.Wait()
 			close(resultCh)
 		}
 	}()
+
 	for {
 		var ok bool
 		task, ok = <-taskCh
@@ -196,7 +212,7 @@ func (e *AnalyzeExec) analyzeWorker(taskCh <-chan *analyzeTask, resultCh chan<- 
 			resultCh <- analyzeIndexPushdown(task.idxExec)
 		case fastTask:
 			task.fastExec.job = task.job
-			task.job.Start()
+			task.job.Start() // ？
 			for _, result := range analyzeFastExec(task.fastExec) {
 				resultCh <- result
 			}
@@ -217,9 +233,11 @@ func analyzeIndexPushdown(idxExec *AnalyzeIndexExec) analyzeResult {
 	// For multi-column index, we cannot define null for the rows, so we still use full range, and the rows
 	// containing null fields would exist in built histograms. Note that, the `NullCount` of histograms for
 	// multi-column index is always 0 then.
+	// 如果只做一列的索引上的统计信息，则全表扫描
 	if len(idxExec.idxInfo.Columns) == 1 {
 		ranges = ranger.FullNotNullRange()
 	}
+	// 返回统计信息
 	hist, cms, err := idxExec.buildStats(ranges, true)
 	if err != nil {
 		return analyzeResult{Err: err, job: idxExec.job}
@@ -294,17 +312,23 @@ func (e *AnalyzeIndexExec) open(ranges []*ranger.Range, considerNull bool) error
 	return nil
 }
 
+// 从distsql.SelectResult 创建统计信息（输入 Result，返回 hist 和 cms 的指针）
 func (e *AnalyzeIndexExec) buildStatsFromResult(result distsql.SelectResult, needCMS bool) (*statistics.Histogram, *statistics.CMSketch, error) {
+	// ？
 	failpoint.Inject("buildStatsFromResult", func(val failpoint.Value) {
 		if val.(bool) {
 			failpoint.Return(nil, nil, errors.New("mock buildStatsFromResult error"))
 		}
 	})
+
 	hist := &statistics.Histogram{}
 	var cms *statistics.CMSketch
+	// 如果需要返回cms，从ast中解析出 d 和 w
 	if needCMS {
 		cms = statistics.NewCMSketch(int32(e.opts[ast.AnalyzeOptCMSketchDepth]), int32(e.opts[ast.AnalyzeOptCMSketchWidth]))
 	}
+
+	// 逐行解析
 	for {
 		data, err := result.NextRaw(context.TODO())
 		if err != nil {
@@ -332,10 +356,12 @@ func (e *AnalyzeIndexExec) buildStatsFromResult(result distsql.SelectResult, nee
 			}
 		}
 	}
+	// 提取 TopN
 	err := hist.ExtractTopN(cms, len(e.idxInfo.Columns), uint32(e.opts[ast.AnalyzeOptNumTopN]))
 	return hist, cms, err
 }
 
+// 索引分析建立统计信息（传入范围，是否考虑空值（单列索引的空值用NDV维护））（返回 hist 和 cms 的指针）
 func (e *AnalyzeIndexExec) buildStats(ranges []*ranger.Range, considerNull bool) (hist *statistics.Histogram, cms *statistics.CMSketch, err error) {
 	if err = e.open(ranges, considerNull); err != nil {
 		return nil, nil, err
@@ -346,30 +372,39 @@ func (e *AnalyzeIndexExec) buildStats(ranges []*ranger.Range, considerNull bool)
 			err = err1
 		}
 	}()
+	// 从 distsql.SelectResult 创建统计信息（实现在当前文件下）
 	hist, cms, err = e.buildStatsFromResult(e.result, true)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// 空值处理（如果返回的结果有空值）
 	if e.countNullRes != nil {
 		nullHist, _, err := e.buildStatsFromResult(e.countNullRes, false)
 		if err != nil {
 			return nil, nil, err
 		}
+		// 如果空值建立的 hist 的 bucket 数量不为0，则 NullCount数量等于最后一个 bucket 的统计值
 		if l := nullHist.Len(); l > 0 {
 			hist.NullCount = nullHist.Buckets[l-1].Count
 		}
 	}
+	// 更新 ID
 	hist.ID = e.idxInfo.ID
 	return hist, cms, nil
 }
 
+// 对列的统计信息建立是使用sample，对index的统计信息建立是使用全表扫描，cms的建立也是全表扫描
 func analyzeColumnsPushdown(colExec *AnalyzeColumnsExec) analyzeResult {
+	// 设定采样范围 //-/
 	var ranges []*ranger.Range
+	// 如果存在主键信息，检查主键信息是否为无符号
 	if colExec.pkInfo != nil {
 		ranges = ranger.FullIntRange(mysql.HasUnsignedFlag(colExec.pkInfo.Flag))
 	} else {
 		ranges = ranger.FullIntRange(false)
 	}
+	// 生成统计信息的接口
 	hists, cms, err := colExec.buildStats(ranges)
 	if err != nil {
 		return analyzeResult{Err: err, job: colExec.job}
@@ -403,12 +438,15 @@ type AnalyzeColumnsExec struct {
 }
 
 func (e *AnalyzeColumnsExec) open(ranges []*ranger.Range) error {
-	e.resultHandler = &tableResultHandler{}
+	e.resultHandler = &tableResultHandler{} // /-/
+	// 范围拆分为两个部分
 	firstPartRanges, secondPartRanges := splitRanges(ranges, true, false)
+	// 对于第一部分建立返回
 	firstResult, err := e.buildResp(firstPartRanges)
 	if err != nil {
 		return err
 	}
+
 	if len(secondPartRanges) == 0 {
 		e.resultHandler.open(nil, firstResult)
 		return nil
@@ -423,10 +461,12 @@ func (e *AnalyzeColumnsExec) open(ranges []*ranger.Range) error {
 	return nil
 }
 
+// build Respond /-/ 数据返回
 func (e *AnalyzeColumnsExec) buildResp(ranges []*ranger.Range) (distsql.SelectResult, error) {
 	var builder distsql.RequestBuilder
 	// Always set KeepOrder of the request to be true, in order to compute
 	// correct `correlation` of columns.
+	// 创建 kvReq 请求 kv 数据 //-/
 	kvReq, err := builder.SetTableRanges(e.physicalTableID, ranges, nil).
 		SetAnalyzeRequest(e.analyzePB).
 		SetKeepOrder(true).
@@ -436,10 +476,12 @@ func (e *AnalyzeColumnsExec) buildResp(ranges []*ranger.Range) (distsql.SelectRe
 		return nil, err
 	}
 	ctx := context.TODO()
+	// 用上面创建的 kvReq 对 Tikv 做 Analyze 请求
 	result, err := distsql.Analyze(ctx, e.ctx.GetClient(), kvReq, e.ctx.GetSessionVars().KVVars, e.ctx.GetSessionVars().InRestrictedSQL)
 	if err != nil {
 		return nil, err
 	}
+	// 从客户端获取结果
 	result.Fetch(ctx)
 	return result, nil
 }
@@ -455,16 +497,21 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 			err = err1
 		}
 	}()
+
 	pkHist := &statistics.Histogram{}
+	// make 对应列数个 SampleCollectors
 	collectors := make([]*statistics.SampleCollector, len(e.colsInfo))
+	// 生成对应每一列的 collector
 	for i := range collectors {
 		collectors[i] = &statistics.SampleCollector{
 			IsMerger:      true,
 			FMSketch:      statistics.NewFMSketch(maxSketchSize),
-			MaxSampleSize: int64(e.opts[ast.AnalyzeOptNumSamples]),
+			MaxSampleSize: int64(e.opts[ast.AnalyzeOptNumSamples]), // 从 ast 中获取最大的 Sample 值
 			CMSketch:      statistics.NewCMSketch(int32(e.opts[ast.AnalyzeOptCMSketchDepth]), int32(e.opts[ast.AnalyzeOptCMSketchWidth])),
 		}
 	}
+
+	// 对每一行处理
 	for {
 		data, err1 := e.resultHandler.nextRaw(context.TODO())
 		if err1 != nil {
@@ -473,21 +520,23 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 		if data == nil {
 			break
 		}
-		resp := &tipb.AnalyzeColumnsResp{}
+		resp := &tipb.AnalyzeColumnsResp{} // ？？
 		err = resp.Unmarshal(data)
 		if err != nil {
 			return nil, nil, err
 		}
-		sc := e.ctx.GetSessionVars().StmtCtx
+		sc := e.ctx.GetSessionVars().StmtCtx // 当前执行语句的变量
 		rowCount := int64(0)
+		// 如果是主键列
 		if e.pkInfo != nil {
-			respHist := statistics.HistogramFromProto(resp.PkHist)
+			respHist := statistics.HistogramFromProto(resp.PkHist) // 转化？
 			rowCount = int64(respHist.TotalRowCount())
 			pkHist, err = statistics.MergeHistograms(sc, pkHist, respHist, int(e.opts[ast.AnalyzeOptNumBuckets]))
 			if err != nil {
 				return nil, nil, err
 			}
 		}
+		// 对每一个属性列 merge
 		for i, rc := range resp.Collectors {
 			respSample := statistics.SampleCollectorFromProto(rc)
 			rowCount = respSample.Count + respSample.NullCount
@@ -495,7 +544,9 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 		}
 		e.job.Update(rowCount)
 	}
+
 	timeZone := e.ctx.GetSessionVars().Location()
+	// 如果是主键列
 	if e.pkInfo != nil {
 		pkHist.ID = e.pkInfo.ID
 		err = pkHist.DecodeTo(&e.pkInfo.FieldType, timeZone)
@@ -505,15 +556,20 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 		hists = append(hists, pkHist)
 		cms = append(cms, nil)
 	}
+
+	// 对于每一列
 	for i, col := range e.colsInfo {
+		// 根据 ast 中解析出的数据，抽取出每一列的 TopN
 		collectors[i].ExtractTopN(uint32(e.opts[ast.AnalyzeOptNumTopN]))
 		for j, s := range collectors[i].Samples {
-			collectors[i].Samples[j].Ordinal = j
+			collectors[i].Samples[j].Ordinal = j // 设定 SampleItem 在排序前的位置，用于计算相关性
+			// 设定元素值
 			collectors[i].Samples[j].Value, err = tablecodec.DecodeColumnValue(s.Value.GetBytes(), &col.FieldType, timeZone)
 			if err != nil {
 				return nil, nil, err
 			}
 		}
+		// 从 Sample 建立这一列的 hist /-/
 		hg, err := statistics.BuildColumn(e.ctx, int64(e.opts[ast.AnalyzeOptNumBuckets]), col.ID, collectors[i], &col.FieldType)
 		if err != nil {
 			return nil, nil, err
@@ -533,15 +589,19 @@ var (
 )
 
 func analyzeFastExec(exec *AnalyzeFastExec) []analyzeResult {
+	// 不用管 Range 直接 buildStats /-/
 	hists, cms, err := exec.buildStats()
 	if err != nil {
 		return []analyzeResult{{Err: err, job: exec.job}}
 	}
+
 	var results []analyzeResult
 	hasPKInfo := 0
 	if exec.pkInfo != nil {
 		hasPKInfo = 1
 	}
+
+	// 如果存在 index 信息，在每一列上建立 idxResult
 	if len(exec.idxsInfo) > 0 {
 		for i := hasPKInfo + len(exec.colsInfo); i < len(hists); i++ {
 			idxResult := analyzeResult{
@@ -558,6 +618,7 @@ func analyzeFastExec(exec *AnalyzeFastExec) []analyzeResult {
 			results = append(results, idxResult)
 		}
 	}
+
 	hist := hists[0]
 	colResult := analyzeResult{
 		PhysicalTableID: exec.physicalTableID,
@@ -593,7 +654,7 @@ type AnalyzeFastExec struct {
 	tblInfo         *model.TableInfo
 	cache           *tikv.RegionCache
 	wg              *sync.WaitGroup
-	sampLocs        chan *tikv.KeyLocation
+	sampLocs        chan *tikv.KeyLocation // regionID 和 Region 包含 key 的范围
 	rowCount        uint64
 	sampCursor      int32
 	sampTasks       []*AnalyzeFastTask
@@ -603,8 +664,10 @@ type AnalyzeFastExec struct {
 	job             *statistics.AnalyzeJob
 }
 
+//
 func (e *AnalyzeFastExec) getSampRegionsRowCount(bo *tikv.Backoffer, needRebuild *bool, err *error, sampTasks *[]*AnalyzeFastTask) {
 	defer func() {
+		// 如果请求失败需要重建则将 sampLocs 的 chan 全部释放
 		if *needRebuild == true {
 			for ok := true; ok; _, ok = <-e.sampLocs {
 				// Do nothing, just clear the channel.
@@ -612,32 +675,43 @@ func (e *AnalyzeFastExec) getSampRegionsRowCount(bo *tikv.Backoffer, needRebuild
 		}
 		e.wg.Done()
 	}()
+
+	// 获取一个 kv 的客户端
 	client := e.ctx.GetStore().(tikv.Storage).GetTiKVClient()
 	for {
 		loc, ok := <-e.sampLocs
 		if !ok {
 			return
 		}
+
+		// 使用 regionID 创建 tikv rpc 请求
 		req := tikvrpc.NewRequest(tikvrpc.CmdDebugGetRegionProperties, &debugpb.GetRegionPropertiesRequest{
 			RegionId: loc.Region.GetID(),
 		})
+
 		var resp *tikvrpc.Response
 		var rpcCtx *tikv.RPCContext
+
 		// we always use the first follower when follower read is enabled
 		rpcCtx, *err = e.cache.GetTiKVRPCContext(bo, loc.Region, e.ctx.GetSessionVars().GetReplicaRead(), 0)
 		if *err != nil {
 			return
 		}
 
+		// 发送 RPC 请求
 		ctx := context.Background()
 		resp, *err = client.SendRequest(ctx, rpcCtx.Addr, req, tikv.ReadTimeoutMedium)
 		if *err != nil {
 			return
 		}
+
+		// 如果请求失败则标记重建
 		if resp.Resp == nil || len(resp.Resp.(*debugpb.GetRegionPropertiesResponse).Props) == 0 {
 			*needRebuild = true
 			return
 		}
+
+		// 请求没有失败的情况下（获取到 Region 的行数）
 		for _, prop := range resp.Resp.(*debugpb.GetRegionPropertiesResponse).Props {
 			if prop.Name == "mvcc.num_rows" {
 				var cnt uint64
@@ -645,10 +719,12 @@ func (e *AnalyzeFastExec) getSampRegionsRowCount(bo *tikv.Backoffer, needRebuild
 				if *err != nil {
 					return
 				}
+
 				newCount := atomic.AddUint64(&e.rowCount, cnt)
+				// 使用获取的行数创建一个AnalyzeFastTask
 				task := &AnalyzeFastTask{
-					Location:    loc,
-					BeginOffset: newCount - cnt,
+					Location:    loc,            // loc 是 regionID 和 key 的范围
+					BeginOffset: newCount - cnt, // 设定 task 需要做的起始行数和结束行数，用于对应采样的随机数
 					EndOffset:   newCount,
 				}
 				*sampTasks = append(*sampTasks, task)
@@ -667,6 +743,7 @@ func (e *AnalyzeFastExec) getNextSampleKey(bo *tikv.Backoffer, startKey kv.Key) 
 		e.scanTasks = e.scanTasks[:0]
 		return startKey, nil
 	}
+	// 对每个 sampTasks 中 region 的开始值排序
 	sort.Slice(e.sampTasks, func(i, j int) bool {
 		return bytes.Compare(e.sampTasks[i].Location.StartKey, e.sampTasks[j].Location.StartKey) < 0
 	})
@@ -705,14 +782,18 @@ func (e *AnalyzeFastExec) getNextSampleKey(bo *tikv.Backoffer, startKey kv.Key) 
 // buildSampTask returns two variables, the first bool is whether the task meets region error
 // and need to rebuild.
 func (e *AnalyzeFastExec) buildSampTask() (needRebuild bool, err error) {
-	// Do get regions row count.
+	// Do get regions row count. /-/ 获取 regions 的行数
 	bo := tikv.NewBackoffer(context.Background(), 500)
+	// 申请一个 slice 维护是否需要再次新建 Task
 	needRebuildForRoutine := make([]bool, e.concurrency)
 	errs := make([]error, e.concurrency)
+
 	sampTasksForRoutine := make([][]*AnalyzeFastTask, e.concurrency)
+
 	e.sampLocs = make(chan *tikv.KeyLocation, e.concurrency)
 	e.wg.Add(e.concurrency)
 	for i := 0; i < e.concurrency; i++ {
+		// 并发获取一个 sampeRange 的行数
 		go e.getSampRegionsRowCount(bo, &needRebuildForRoutine[i], &errs[i], &sampTasksForRoutine[i])
 	}
 
@@ -733,6 +814,7 @@ func (e *AnalyzeFastExec) buildSampTask() (needRebuild bool, err error) {
 
 	store, _ := e.ctx.GetStore().(tikv.Storage)
 	e.cache = store.GetRegionCache()
+	// 获取一个表的开始 key 与结束 key
 	startKey, endKey := tablecodec.GetTableHandleKeyRange(e.physicalTableID)
 	targetKey, err := e.getNextSampleKey(bo, startKey)
 	if err != nil {
@@ -799,21 +881,28 @@ func (e *AnalyzeFastExec) getValueByInfo(colInfo *model.ColumnInfo, values map[i
 	return val, nil
 }
 
+// 更新采样值 /-/
 func (e *AnalyzeFastExec) updateCollectorSamples(sValue []byte, sKey kv.Key, samplePos int32, hasPKInfo int) (err error) {
 	// Decode the cols value in order.
+	// 按照顺序解码 value
 	var values map[int64]types.Datum
 	values, err = e.decodeValues(sValue)
 	if err != nil {
 		return err
 	}
+	// 解码 rowID
 	var rowID int64
 	rowID, err = tablecodec.DecodeRowKey(sKey)
 	if err != nil {
 		return err
 	}
+
 	// Update the primary key collector.
+	// 更新主键收集器
 	if hasPKInfo > 0 {
+		// 从解码后的值获取主键值
 		v, ok := values[e.pkInfo.ID]
+		// 如果不成功，从主键中解析
 		if !ok {
 			var key int64
 			_, key, err = tablecodec.DecodeRecordKey(sKey)
@@ -822,28 +911,37 @@ func (e *AnalyzeFastExec) updateCollectorSamples(sValue []byte, sKey kv.Key, sam
 			}
 			v = types.NewIntDatum(key)
 		}
+		// 如果主键值是无符号的，则转化
 		if mysql.HasUnsignedFlag(e.pkInfo.Flag) {
 			v.SetUint64(uint64(v.GetInt64()))
 		}
+		// 如果第一个（主键）收集器某个采样值为 nil，则先传一个指针
 		if e.collectors[0].Samples[samplePos] == nil {
 			e.collectors[0].Samples[samplePos] = &statistics.SampleItem{}
 		}
+		// 设置采样值的 rowID 和 Value
 		e.collectors[0].Samples[samplePos].RowID = rowID
 		e.collectors[0].Samples[samplePos].Value = v
 	}
+
 	// Update the columns' collectors.
+	// 更新列收集器，对每一列
 	for j, colInfo := range e.colsInfo {
+		// 直接获取列值
 		v, err := e.getValueByInfo(colInfo, values)
 		if err != nil {
 			return err
 		}
+		// 如果某一个收集器上采样值为空，则设置采样的 RowID 和 value
 		if e.collectors[hasPKInfo+j].Samples[samplePos] == nil {
 			e.collectors[hasPKInfo+j].Samples[samplePos] = &statistics.SampleItem{}
 		}
 		e.collectors[hasPKInfo+j].Samples[samplePos].RowID = rowID
 		e.collectors[hasPKInfo+j].Samples[samplePos].Value = v
 	}
+
 	// Update the indexes' collectors.
+	// 更新 Index 收集器，对每个 idx
 	for j, idxInfo := range e.idxsInfo {
 		idxVals := make([]types.Datum, 0, len(idxInfo.Columns))
 		for _, idxCol := range idxInfo.Columns {
@@ -890,28 +988,38 @@ func (e *AnalyzeFastExec) handleBatchSeekResponse(kvMap map[string][]byte) (err 
 	return nil
 }
 
+// 全表扫描
 func (e *AnalyzeFastExec) handleScanIter(iter kv.Iterator) (scanKeysSize int, err error) {
+	// 如果有主键信息，设置标志位为 1
 	hasPKInfo := 0
 	if e.pkInfo != nil {
 		hasPKInfo = 1
 	}
+	// 建立随机数
 	rander := rand.New(rand.NewSource(e.randSeed + int64(e.rowCount)))
+	// 从 ast 获取样本大小
 	sampleSize := int64(e.opts[ast.AnalyzeOptNumSamples])
+
 	for ; iter.Valid() && err == nil; err = iter.Next() {
 		// reservoir sampling
+		// 采用蓄水池算法建立采样 //-/
 		e.rowCount++
 		scanKeysSize++
 		randNum := rander.Int63n(int64(e.rowCount))
+		// 采样点越界则重新生成
 		if randNum > sampleSize && e.sampCursor == int32(sampleSize) {
 			continue
 		}
 
+		// 生成随机数
 		p := rander.Int31n(int32(sampleSize))
+		// 如果 sampleSize 还没有满，直接连续采样（蓄水池）
 		if e.sampCursor < int32(sampleSize) {
 			p = e.sampCursor
 			e.sampCursor++
 		}
 
+		// 如果没有则传入随机数获取值更新
 		err = e.updateCollectorSamples(iter.Value(), iter.Key(), p, hasPKInfo)
 		if err != nil {
 			return
@@ -921,37 +1029,48 @@ func (e *AnalyzeFastExec) handleScanIter(iter kv.Iterator) (scanKeysSize int, er
 }
 
 func (e *AnalyzeFastExec) handleScanTasks(bo *tikv.Backoffer) (keysSize int, err error) {
+	// 获取最新的快照版本
 	snapshot, err := e.ctx.GetStore().(tikv.Storage).GetSnapshot(kv.MaxVersion)
 	if err != nil {
 		return 0, err
 	}
+	// 从follwer去读
 	if e.ctx.GetSessionVars().GetReplicaRead().IsFollowerRead() {
 		snapshot.SetOption(kv.ReplicaRead, kv.ReplicaReadFollower)
 	}
+
+	// 对于每个 region
 	for _, t := range e.scanTasks {
+		// 建立 iterator
 		iter, err := snapshot.Iter(t.StartKey, t.EndKey)
 		if err != nil {
 			return keysSize, err
 		}
+		// 返回扫描行数
 		size, err := e.handleScanIter(iter)
 		keysSize += size
 		if err != nil {
 			return keysSize, err
 		}
 	}
+
 	return keysSize, nil
 }
 
+// 处理采样任务
 func (e *AnalyzeFastExec) handleSampTasks(bo *tikv.Backoffer, workID int, err *error) {
 	defer e.wg.Done()
+	// 获取最后的快照版本
 	var snapshot kv.Snapshot
 	snapshot, *err = e.ctx.GetStore().(tikv.Storage).GetSnapshot(kv.MaxVersion)
 	if *err != nil {
 		return
 	}
+	// 从 Follower 中读
 	if e.ctx.GetSessionVars().GetReplicaRead().IsFollowerRead() {
 		snapshot.SetOption(kv.ReplicaRead, kv.ReplicaReadFollower)
 	}
+	// 设置随机数
 	rander := rand.New(rand.NewSource(e.randSeed + int64(workID)))
 
 	for i := workID; i < len(e.sampTasks); i += e.concurrency {
@@ -1053,6 +1172,7 @@ func (e *AnalyzeFastExec) buildIndexStats(idxInfo *model.IndexInfo, collector *s
 	return hist, cmSketch, err
 }
 
+// 运行任务 /-/
 func (e *AnalyzeFastExec) runTasks() ([]*statistics.Histogram, []*statistics.CMSketch, error) {
 	errs := make([]error, e.concurrency)
 	hasPKInfo := 0
@@ -1060,7 +1180,9 @@ func (e *AnalyzeFastExec) runTasks() ([]*statistics.Histogram, []*statistics.CMS
 		hasPKInfo = 1
 	}
 	// collect column samples and primary key samples and index samples.
+	// 收集列样本、主键样本 和 index样本
 	length := len(e.colsInfo) + hasPKInfo + len(e.idxsInfo)
+	// 建立需要采样的目标个收集器
 	e.collectors = make([]*statistics.SampleCollector, length)
 	for i := range e.collectors {
 		e.collectors[i] = &statistics.SampleCollector{
@@ -1070,10 +1192,13 @@ func (e *AnalyzeFastExec) runTasks() ([]*statistics.Histogram, []*statistics.CMS
 	}
 
 	e.wg.Add(e.concurrency)
+	// todoread
 	bo := tikv.NewBackoffer(context.Background(), 500)
 	for i := 0; i < e.concurrency; i++ {
 		go e.handleSampTasks(bo, i, &errs[i])
 	}
+
+	//
 	e.wg.Wait()
 	for _, err := range errs {
 		if err != nil {
@@ -1117,27 +1242,33 @@ func (e *AnalyzeFastExec) runTasks() ([]*statistics.Histogram, []*statistics.CMS
 	return hists, cms, nil
 }
 
+// fastAnalyze 构建统计信息的接口
 func (e *AnalyzeFastExec) buildStats() (hists []*statistics.Histogram, cms []*statistics.CMSketch, err error) {
 	// To set rand seed, it's for unit test.
-	// To ensure that random sequences are different in non-test environments, RandSeed must be set time.Now().
+	// To ensure that random sequences are different in non-test environments, RandSeed must be set time.Now(). /-/
 	if RandSeed == 1 {
 		e.randSeed = time.Now().UnixNano()
 	} else {
 		e.randSeed = RandSeed
 	}
+	// new 一个随机数来源用来生成随机数
 	rander := rand.New(rand.NewSource(e.randSeed))
 
 	// Only four rebuilds for sample task are allowed.
+	// 只允许最多 4 次重新建立对采样任务
 	needRebuild, maxBuildTimes := true, 5
 	regionErrorCounter := 0
 	for counter := maxBuildTimes; needRebuild && counter > 0; counter-- {
 		regionErrorCounter++
+		// /-/
 		needRebuild, err = e.buildSampTask()
 		if err != nil {
 			return nil, nil, err
 		}
 	}
+
 	fastAnalyzeHistogramRegionError.Observe(float64(regionErrorCounter))
+	// 如果5次创建都没有成功，则直接返回error
 	if needRebuild {
 		errMsg := "build fast analyze task failed, exceed maxBuildTimes: %v"
 		return nil, nil, errors.Errorf(errMsg, maxBuildTimes)
@@ -1147,6 +1278,7 @@ func (e *AnalyzeFastExec) buildStats() (hists []*statistics.Histogram, cms []*st
 
 	// If total row count of the table is smaller than 2*MaxSampleSize, we
 	// translate all the sample tasks to scan tasks.
+	// 如果表的总行数小于样本最大长度的2倍，则直接进行全表扫描
 	sampleSize := e.opts[ast.AnalyzeOptNumSamples]
 	if e.rowCount < sampleSize*2 {
 		for _, task := range e.sampTasks {
@@ -1157,12 +1289,15 @@ func (e *AnalyzeFastExec) buildStats() (hists []*statistics.Histogram, cms []*st
 		return e.runTasks()
 	}
 
+	// 其它情况下
 	randPos := make([]uint64, 0, sampleSize+1)
+	// 生成 samplesize 个随机数
 	for i := 0; i < int(sampleSize); i++ {
 		randPos = append(randPos, uint64(rander.Int63n(int64(e.rowCount))))
 	}
+	// 随机数排序
 	sort.Slice(randPos, func(i, j int) bool { return randPos[i] < randPos[j] })
-
+	// 使用二分查找对比 beginoffset 和 endoffest 创建 sampTask
 	for _, task := range e.sampTasks {
 		begin := sort.Search(len(randPos), func(i int) bool { return randPos[i] >= task.BeginOffset })
 		end := sort.Search(len(randPos), func(i int) bool { return randPos[i] >= task.EndOffset })

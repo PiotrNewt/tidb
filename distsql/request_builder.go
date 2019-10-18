@@ -176,7 +176,7 @@ func (builder *RequestBuilder) SetConcurrency(concurrency int) *RequestBuilder {
 	return builder
 }
 
-// TableRangesToKVRanges converts table ranges to "KeyRange".
+// TableRangesToKVRanges converts table ranges to "KeyRange". //-/
 func TableRangesToKVRanges(tid int64, ranges []*ranger.Range, fb *statistics.QueryFeedback) []kv.KeyRange {
 	if fb == nil || fb.Hist == nil {
 		return tableRangesToKVRangesWithoutSplit(tid, ranges)

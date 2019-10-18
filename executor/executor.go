@@ -97,6 +97,7 @@ func (e *baseExecutor) base() *baseExecutor {
 
 // Open initializes children recursively and "childrenResults" according to children's schemas.
 func (e *baseExecutor) Open(ctx context.Context) error {
+	// 递归调用 open 每一个 children Node(另一个执行器)
 	for _, child := range e.children {
 		err := child.Open(ctx)
 		if err != nil {
@@ -108,6 +109,7 @@ func (e *baseExecutor) Open(ctx context.Context) error {
 
 // Close closes all executors and release all resources.
 func (e *baseExecutor) Close() error {
+	// 递归调用 close 每一个 children Node
 	var firstErr error
 	for _, src := range e.children {
 		if err := src.Close(); err != nil && firstErr == nil {
@@ -126,6 +128,7 @@ func (e *baseExecutor) Schema() *expression.Schema {
 }
 
 // newFirstChunk creates a new chunk to buffer current executor's result.
+// 执行器结果缓冲
 func newFirstChunk(e Executor) *chunk.Chunk {
 	base := e.base()
 	return chunk.New(base.retFieldTypes, base.initCap, base.maxChunkSize)

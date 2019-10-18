@@ -143,13 +143,18 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 	// and A0 < B0 < B1 < A1. We will first read the stats of B, and update the lastVersion to B0, but we cannot read
 	// the table stats of A0 if we read stats that greater than lastVersion which is B0.
 	// We can read the stats if the diff between commit time and version is less than three lease.
+
+	// 提交时间和版本之间的差异小于3个时间戳，则可读
 	offset := DurationToTS(3 * h.Lease())
 	if lastVersion >= offset {
 		lastVersion = lastVersion - offset
 	} else {
 		lastVersion = 0
 	}
+
+	// 获取元信息
 	sql := fmt.Sprintf("SELECT version, table_id, modify_count, count from mysql.stats_meta where version > %d order by version", lastVersion)
+	// 执行受限SQL查询（目标为系统表）
 	rows, _, err := h.restrictedExec.ExecRestrictedSQL(sql)
 	if err != nil {
 		return errors.Trace(err)
@@ -157,12 +162,16 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 
 	tables := make([]*statistics.Table, 0, len(rows))
 	deletedTableIDs := make([]int64, 0, len(rows))
+
+	// 每行对应一个表
 	for _, row := range rows {
 		version := row.GetUint64(0)
 		physicalID := row.GetInt64(1)
 		modifyCount := row.GetInt64(2)
 		count := row.GetInt64(3)
 		lastVersion = version
+
+		// 从表的物理 ID 获取表
 		h.mu.Lock()
 		table, ok := h.getTableByPhysicalID(is, physicalID)
 		h.mu.Unlock()
@@ -171,7 +180,9 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 			deletedTableIDs = append(deletedTableIDs, physicalID)
 			continue
 		}
+
 		tableInfo := table.Meta()
+		// 从存储捞统计信息数据上来（因为统计信息也是一个表）
 		tbl, err := h.tableStatsFromStorage(tableInfo, physicalID, false, nil)
 		// Error is not nil may mean that there are some ddl changes on this table, we will not update it.
 		if err != nil {
@@ -190,6 +201,7 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 	}
 	h.mu.Lock()
 	h.mu.lastVersion = lastVersion
+	// 更新统计信息表缓存
 	h.UpdateTableStats(tables, deletedTableIDs)
 	h.mu.Unlock()
 	return nil
@@ -520,7 +532,9 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ctx := context.TODO()
+	// 实例化一个 SQLExecutor
 	exec := h.mu.ctx.(sqlexec.SQLExecutor)
+	// 执行 sql 流程控制语句 "begin"
 	_, err = exec.Execute(ctx, "begin")
 	if err != nil {
 		return errors.Trace(err)
@@ -536,6 +550,7 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	version := txn.StartTS()
 	sqls := make([]string, 0, 4)
 	// If the count is less than 0, then we do not want to update the modify count and count.
+	// 写统计信息元数据
 	if count >= 0 {
 		sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_meta (version, table_id, count) values (%d, %d, %d)", version, tableID, count))
 	} else {
@@ -547,6 +562,7 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	}
 	// Delete outdated data
 	sqls = append(sqls, fmt.Sprintf("delete from mysql.stats_top_n where table_id = %d and is_index = %d and hist_id = %d", tableID, isIndex, hg.ID))
+	// 由于cms维护了一个topN的数据计数器，所以需要一并更新（插入行）
 	for _, meta := range cms.TopN() {
 		sqls = append(sqls, fmt.Sprintf("insert into mysql.stats_top_n (table_id, is_index, hist_id, value, count) values (%d, %d, %d, X'%X', %d)", tableID, isIndex, hg.ID, meta.Data, meta.Count))
 	}
@@ -554,34 +570,45 @@ func (h *Handle) SaveStatsToStorage(tableID int64, count int64, isIndex int, hg 
 	if isAnalyzed == 1 {
 		flag = statistics.AnalyzeFlag
 	}
+	// 在这里将其余统计信息的元数据持久化
 	sqls = append(sqls, fmt.Sprintf("replace into mysql.stats_histograms (table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch, tot_col_size, stats_ver, flag, correlation) values (%d, %d, %d, %d, %d, %d, X'%X', %d, %d, %d, %f)",
 		tableID, isIndex, hg.ID, hg.NDV, version, hg.NullCount, data, hg.TotColSize, statistics.CurStatsVersion, flag, hg.Correlation))
+	// 应该是删除过期数据，不知道 mysql.stats_buckets 指的是什么
 	sqls = append(sqls, fmt.Sprintf("delete from mysql.stats_buckets where table_id = %d and is_index = %d and hist_id = %d", tableID, isIndex, hg.ID))
+
 	sc := h.mu.ctx.GetSessionVars().StmtCtx
 	var lastAnalyzePos []byte
+	// 对于直方图的每一个桶
 	for i := range hg.Buckets {
 		count := hg.Buckets[i].Count
 		if i > 0 {
 			count -= hg.Buckets[i-1].Count
 		}
+		// 定义上界
 		var upperBound types.Datum
+		// 获取上界（将 Datum 转化成为 mysql.TypeBlob）
 		upperBound, err = hg.GetUpper(i).ConvertTo(sc, types.NewFieldType(mysql.TypeBlob))
 		if err != nil {
 			return
 		}
+		// 对于最后一个Buckets，直接获取整个hg的上界
 		if i == len(hg.Buckets)-1 {
 			lastAnalyzePos = upperBound.GetBytes()
 		}
+		// 定义下届
 		var lowerBound types.Datum
 		lowerBound, err = hg.GetLower(i).ConvertTo(sc, types.NewFieldType(mysql.TypeBlob))
 		if err != nil {
 			return
 		}
+		// 将 hg.bucket 持久化
 		sqls = append(sqls, fmt.Sprintf("insert into mysql.stats_buckets(table_id, is_index, hist_id, bucket_id, count, repeats, lower_bound, upper_bound) values(%d, %d, %d, %d, %d, %d, X'%X', X'%X')", tableID, isIndex, hg.ID, i, count, hg.Buckets[i].Repeat, lowerBound.GetBytes(), upperBound.GetBytes()))
 	}
+	// 记录最后的 analyze 点
 	if isAnalyzed == 1 && len(lastAnalyzePos) > 0 {
 		sqls = append(sqls, fmt.Sprintf("update mysql.stats_histograms set last_analyze_pos = X'%X' where table_id = %d and is_index = %d and hist_id = %d", lastAnalyzePos, tableID, isIndex, hg.ID))
 	}
+	// 执行sql语句
 	return execSQLs(context.Background(), exec, sqls)
 }
 

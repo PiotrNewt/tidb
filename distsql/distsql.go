@@ -97,6 +97,7 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 // SelectWithRuntimeStats sends a DAG request, returns SelectResult.
 // The difference from Select is that SelectWithRuntimeStats will set copPlanIDs into selectResult,
 // which can help selectResult to collect runtime stats.
+// 可以收集运行时候统计信息的 distsql 请求
 func SelectWithRuntimeStats(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request,
 	fieldTypes []*types.FieldType, fb *statistics.QueryFeedback, copPlanIDs []fmt.Stringer, rootPlanID fmt.Stringer) (SelectResult, error) {
 	sr, err := Select(ctx, sctx, kvReq, fieldTypes, fb)
@@ -109,7 +110,7 @@ func SelectWithRuntimeStats(ctx context.Context, sctx sessionctx.Context, kvReq 
 	return sr, err
 }
 
-// Analyze do a analyze request.
+// Analyze do a analyze request. //-/ range 封装在 kvreq 中
 func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars *kv.Variables,
 	isRestrict bool) (SelectResult, error) {
 	resp := client.Send(ctx, kvReq, vars)
