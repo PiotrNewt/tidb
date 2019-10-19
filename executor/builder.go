@@ -1596,6 +1596,7 @@ func (b *executorBuilder) buildAnalyzeFastIndex(e *AnalyzeExec, task plannercore
 	}
 }
 
+// /-/
 func (b *executorBuilder) buildAnalyze(v *plannercore.Analyze) Executor {
 	e := &AnalyzeExec{
 		baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
@@ -1612,7 +1613,7 @@ func (b *executorBuilder) buildAnalyze(v *plannercore.Analyze) Executor {
 			e.tasks = append(e.tasks, b.buildAnalyzePKIncremental(task, v.Opts))
 		} else {
 			if enableFastAnalyze {
-				b.buildAnalyzeFastColumn(e, task, v.Opts)
+				b.buildAnalyzeFastColumn(e, task, v.Opts) //构建 FastAnalyze
 			} else {
 				e.tasks = append(e.tasks, b.buildAnalyzeColumnsPushdown(task, v.Opts, autoAnalyze))
 			}
