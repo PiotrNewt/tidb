@@ -107,16 +107,23 @@ func analyzeSample(ctx sessionctx.Context, histColl *HistColl, columnID int64, i
 			histColl.Indices[result.Sample[0].SID].SampleC = result.Sample[0]
 		} else {
 			tableInfo := getTableInfoByID(ctx, histColl.PhysicalID)
+
+			tempColumn := histColl.Columns
+			histColl.Columns = make(map[int64]*Column, len(result.Sample))
+
 			for _, samplec := range result.Sample {
-				if histColl.Columns[samplec.SID] == nil {
-					histColl.Columns[samplec.SID] = &Column{
-						SampleC:    samplec,
-						PhysicalID: histColl.PhysicalID,
-						Count:      histColl.Count,
-						Info:       tableInfo.Columns[samplec.SID-1],
+				histColl.Columns[samplec.SID] = &Column{
+					SampleC:    samplec,
+					PhysicalID: histColl.PhysicalID,
+					Count:      histColl.Count,
+					Info:       tableInfo.Columns[samplec.SID-1],
+				}
+				histColl.Columns[samplec.SID].SampleC = samplec
+				for _, col := range tempColumn {
+					if col.Histogram.ID == samplec.SID {
+						histColl.Columns[samplec.SID].Histogram = col.Histogram
+
 					}
-				} else {
-					histColl.Columns[samplec.SID].SampleC = samplec
 				}
 			}
 		}

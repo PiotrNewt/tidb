@@ -322,7 +322,6 @@ func getSelectivityBySample(ctx sessionctx.Context, exprs []expression.Expressio
 	var err error
 	err = AnalyzeSampleForColumns(ctx, coll, 10000)
 
-	fmt.Println("I am doing well")
 	if err != nil {
 		return 1
 	}
@@ -332,21 +331,6 @@ func getSelectivityBySample(ctx sessionctx.Context, exprs []expression.Expressio
 	if totalCount == 0 {
 		return 1
 	}
-
-	//physicalID := coll.PhysicalID
-	//is := ctx.GetSessionVars().TxnCtx.InfoSchema.(interface {
-	//	TableByID(id int64) (table.Table, bool)
-	//})
-	//table, _ := is.TableByID(physicalID)
-	//tableInfo := table.Meta()
-	//fmt.Printf(" %v (ID:%v)\n ", tableInfo.Name, coll.PhysicalID)
-
-	// schema := expression.TableInfo2Schema(ctx, tableInfo)
-
-	//for _, chunkColumnPtr := range sampleChunk.
-	//schema := &expression.
-
-	///////////////////////////////
 
 	schemaColumns := []*expression.Column{}
 
