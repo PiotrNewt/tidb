@@ -49,6 +49,20 @@ func (coll *HistColl) GetChunkOfSample() *chunk.Chunk {
 	return chunk
 }
 
+// GetChunkOfSampleForExpr return chunk the Expr need
+func (coll *HistColl) GetChunkOfSampleForExpr(IDs []int64) *chunk.Chunk {
+	tps := make([]*types.FieldType, len(IDs))
+	for i, id := range IDs {
+		tps[i] = &coll.Columns[id].Info.FieldType
+	}
+	chunk := chunk.NewChunkWithCapacity(tps, int(coll.Count))
+	sort.Slice(IDs, func(i, j int) bool { return IDs[i] < IDs[j] })
+	for i, key := range IDs {
+		chunk.SetCol(int(i), coll.Columns[key].SampleC.SampleColumn)
+	}
+	return chunk
+}
+
 // AnalyzeSampleForColumns gets sample for all columns
 func AnalyzeSampleForColumns(ctx sessionctx.Context, histColl *HistColl, sampSize uint64) error {
 	return analyzeSample(ctx, histColl, -1, false, sampSize, false)
@@ -106,6 +120,7 @@ func analyzeSample(ctx sessionctx.Context, histColl *HistColl, columnID int64, i
 		if result.IsIndex == 1 {
 			histColl.Indices[result.Sample[0].SID].SampleC = result.Sample[0]
 		} else {
+
 			tableInfo := getTableInfoByID(ctx, histColl.PhysicalID)
 
 			tempColumn := histColl.Columns
@@ -126,6 +141,7 @@ func analyzeSample(ctx sessionctx.Context, histColl *HistColl, columnID int64, i
 					}
 				}
 			}
+
 		}
 	}
 	return nil

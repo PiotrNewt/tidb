@@ -197,7 +197,6 @@ func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Exp
 			ret *= 1.0 / pseudoEqualRate
 		}
 	}
-
 	extractedCols := make([]*expression.Column, 0, len(coll.Columns))
 	extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, remainedExprs, nil)
 	for id, colInfo := range coll.Columns {
@@ -225,6 +224,7 @@ func (coll *HistColl) Selectivity(ctx sessionctx.Context, exprs []expression.Exp
 			nodes[len(nodes)-1].Selectivity = cnt / float64(coll.Count)
 		}
 	}
+
 	for id, idxInfo := range coll.Indices {
 		idxCols := expression.FindPrefixOfIndex(extractedCols, coll.Idx2ColumnIDs[id])
 		if len(idxCols) > 0 {
@@ -319,8 +319,7 @@ func isEnabledDynamicSampling(ctx sessionctx.Context, exprs []expression.Express
 
 // getSelecivityBySample randomly pick samples from table and return selectivity based on samples.
 func getSelectivityBySample(ctx sessionctx.Context, exprs []expression.Expression, coll *HistColl) float64 {
-	var err error
-	err = AnalyzeSampleForColumns(ctx, coll, 10000)
+	err := AnalyzeSampleForColumns(ctx, coll, 100)
 
 	if err != nil {
 		return 1
@@ -332,29 +331,47 @@ func getSelectivityBySample(ctx sessionctx.Context, exprs []expression.Expressio
 		return 1
 	}
 
-	schemaColumns := []*expression.Column{}
+	// extractedCols := make([]*expression.Column, 0, len(coll.Columns))
+	// extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, exprs, nil)
+	// for id, colInfo := range coll.Columns {
+	// 	col := expression.ColInfo2Col(extractedCols, colInfo.Info)
+	// 	if col != nil {
+	// 		fmt.Printf("id: %v / UniqueID :%v", id, col.UniqueID)
+	// 	}
+	// }
 
-	for _, statisticColumn := range coll.Columns { // sc: statistics.Column
-		offset := statisticColumn.Info.Offset
-		expressionColumn := &expression.Column{
-			UniqueID: int64(offset + 1),
-			Index:    offset,
+	extractedCols := make([]*expression.Column, 0, len(coll.Columns))
+	extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, exprs, nil)
+	schemaColumns := []*expression.Column{}
+	for id, colInfo := range coll.Columns {
+		col := expression.ColInfo2Col(extractedCols, colInfo.Info)
+		if col != nil {
+			expressionColumn := &expression.Column{
+				ID:       id,
+				UniqueID: col.UniqueID,
+			}
+			schemaColumns = append(schemaColumns, expressionColumn)
+		} else {
+			expressionColumn := &expression.Column{
+				ID:       id,
+				UniqueID: -1,
+			}
+			schemaColumns = append(schemaColumns, expressionColumn)
 		}
-		schemaColumns = append(schemaColumns, expressionColumn)
 	}
 
 	sort.Slice(schemaColumns, func(i, j int) bool {
-		return schemaColumns[i].Index < schemaColumns[j].Index
+		return schemaColumns[i].ID < schemaColumns[j].ID
 	})
 
 	schema := &expression.Schema{Columns: schemaColumns}
-
 	newExprs := []expression.Expression{}
 
 	for _, expr := range exprs {
 		newSf, _ := expr.ResolveIndices(schema)
 		newExprs = append(newExprs, newSf)
 	}
+
 	results := make([]bool, 0, totalCount)
 	results, err = expression.VectorizedFilter(ctx, newExprs, chunk.NewIterator4Chunk(sampleChunk), results)
 	if err != nil {
