@@ -253,6 +253,14 @@ func (h *Handle) GetPartitionStats(tblInfo *model.TableInfo, pid int64) *statist
 	return tbl
 }
 
+// UpdateSample used to update histColl in cacahe
+func (h *Handle) UpdateSample(coll *statistics.HistColl) {
+	newCache := h.copyFromOldCache()
+	id := coll.PhysicalID
+	newCache[id].HistColl = *coll
+	h.StatsCache.Store(newCache)
+}
+
 func (h *Handle) copyFromOldCache() StatsCache {
 	newCache := StatsCache{}
 	oldCache := h.StatsCache.Load().(StatsCache)

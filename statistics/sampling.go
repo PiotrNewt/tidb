@@ -144,8 +144,14 @@ func analyzeSample(ctx sessionctx.Context, histColl *HistColl, columnID int64, i
 
 		}
 	}
+	// cache
+	histColl.Chunk = histColl.GetChunkOfSample()
+	UpdateSampeInCache(ctx, histColl)
 	return nil
 }
+
+// UpdateSampeInCache used to update cache
+var UpdateSampeInCache func(ctx sessionctx.Context, coll *HistColl)
 
 var (
 	// RandSeed is Random seed

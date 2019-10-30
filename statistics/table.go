@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/ranger"
 	"go.uber.org/atomic"
@@ -59,6 +60,7 @@ type HistColl struct {
 	PhysicalID int64
 	Columns    map[int64]*Column
 	Indices    map[int64]*Index
+	Chunk      *chunk.Chunk
 	// Idx2ColumnIDs maps the index id to its column ids. It's used to calculate the selectivity in planner.
 	Idx2ColumnIDs map[int64][]int64
 	// ColID2IdxID maps the column id to index id whose first column is it. It's used to calculate the selectivity in planner.
@@ -312,6 +314,7 @@ func (coll *HistColl) ID2UniqueID(columns []*expression.Column) *HistColl {
 		Count:          coll.Count,
 		ModifyCount:    coll.ModifyCount,
 		Columns:        cols,
+		Chunk:          coll.Chunk,
 	}
 	return newColl
 }
@@ -367,6 +370,7 @@ func (coll *HistColl) GenerateHistCollFromColumnInfo(infos []*model.ColumnInfo, 
 		Indices:        newIdxHistMap,
 		ColID2IdxID:    colID2IdxID,
 		Idx2ColumnIDs:  idx2Columns,
+		Chunk:          coll.Chunk,
 	}
 	return newColl
 }
@@ -482,34 +486,6 @@ func (coll *HistColl) getIndexRowCount(sc *stmtctx.StatementContext, idxID int64
 		totalCount = idx.TotalRowCount()
 	}
 	return totalCount, nil
-}
-
-// IsMissing returns true when any column or index is missing histogram or count min sketch.
-func (coll *HistColl) IsMissing() bool {
-	if len(coll.Columns) == 0 || len(coll.Indices) == 0 {
-		return true
-	}
-	for _, column := range coll.Columns {
-		if len(column.Histogram.Buckets) == 0 || column.CMSketch == nil {
-			return true
-		}
-	}
-
-	for _, index := range coll.Indices {
-		if len(index.Histogram.Buckets) == 0 || index.CMSketch == nil {
-			return true
-		}
-	}
-	return false
-}
-
-// IsStale is xxx(TODO xiaoronglv)
-func (coll *HistColl) IsStale() bool {
-	if coll.Count != 0 && float64(coll.ModifyCount)/float64(coll.Count) >= 0.1 {
-		return true
-	}
-
-	return false
 }
 
 const fakePhysicalID int64 = -1
