@@ -304,7 +304,6 @@ func isEnabledDynamicSampling(ctx sessionctx.Context, coll *HistColl) (bool, flo
 
 	// dsLevel stands for Dynamic Sampling Level
 	dsLevel, err := variable.GetSessionSystemVar(ctx.GetSessionVars(), variable.TiDBOptimizerDynamicSampling)
-	// return false when this flag is not avaiable.
 	if err != nil {
 		return false, 0
 	}

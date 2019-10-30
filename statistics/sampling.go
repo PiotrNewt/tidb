@@ -103,16 +103,12 @@ func analyzeSample(ctx sessionctx.Context, histColl *HistColl, columnID int64, i
 	close(taskCh)
 
 	// Get Reuslts
-	panicCnt := 0
-	for panicCnt < 1 {
+	for {
 		result, ok := <-resultCh
 		if !ok {
 			break
 		}
 		if result.Err != nil {
-			if result.Err == errAnalyzeSamplingWorkerPanic {
-				panicCnt++
-			}
 			break
 		}
 
@@ -155,8 +151,8 @@ var UpdateSampeInCache func(ctx sessionctx.Context, coll *HistColl)
 
 var (
 	// RandSeed is Random seed
-	RandSeed                      = int64(1)
-	errAnalyzeSamplingWorkerPanic = errors.New("sample worker panic")
+	RandSeed = int64(1)
+	//errAnalyzeSamplingWorkerPanic = errors.New("sample worker panic")
 )
 
 type analyzeSampleTask struct {
