@@ -3,7 +3,6 @@ package statistics
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -40,11 +39,6 @@ func (coll *HistColl) GetChunkOfSample() *chunk.Chunk {
 	sort.Slice(mapKey, func(i, j int) bool { return mapKey[i] < mapKey[j] })
 	for i, key := range mapKey {
 		chunk.SetCol(int(i), coll.Columns[key].SampleC.SampleColumn)
-	}
-
-	// Just for debug --> order of the Columns
-	for _, key := range mapKey {
-		fmt.Printf("%v | ", coll.Columns[key].Info.Name.String())
 	}
 	return chunk
 }
@@ -369,10 +363,6 @@ func (e *AnalyzeSampleExec) runTasks() ([]*SampleC, error) {
 
 	rowCount := int64(e.rowCount)
 
-	// Debug
-	// Can be used to judge the system table
-	// fmt.Printf("--%v : %v--\n", e.tblInfo.Name, e.physicalTableID)
-
 	// Generate sampling results
 	samples := make([]*SampleC, length)
 	for i := 0; i < length; i++ {
@@ -388,9 +378,6 @@ func (e *AnalyzeSampleExec) runTasks() ([]*SampleC, error) {
 		}
 
 		collector.TotalSize *= rowCount / int64(len(collector.Samples))
-
-		// Debug
-		// fmt.Printf("-col = %v\n", i)
 
 		if i < hasPKInfo {
 			samples[i], err = e.buildColSample(e.pkInfo.ID, e.collectors[i], true)
@@ -595,7 +582,7 @@ func (e *AnalyzeSampleExec) getSampRegionsRowCount(bo *tikv.Backoffer, needRebui
 	defer func() {
 		if *needRebuild == true {
 			for ok := true; ok; _, ok = <-e.sampLocs {
-				// 清空 e.sampLocs (region 的信息)
+				// clear e.sampLocs info of region
 			}
 		}
 		e.wg.Done()

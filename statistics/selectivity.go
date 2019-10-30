@@ -342,14 +342,14 @@ func getSelectivityBySample(ctx sessionctx.Context, exprs []expression.Expressio
 		rate -= 0.005
 	}
 
-	// cache 中有且没有过期 ————> 用 cache
+	// cache
 	if coll.samlpeInCache() {
 		//sampleChunk := coll.GetChunkOfSample()
 		sampleChunk := coll.Chunk
 		return getSelectivityByChunk(ctx, sampleChunk, exprs, coll)
 	}
 
-	// cache 中没有，cache 中有但过期 ————> sampling
+	// cache unable
 	if !coll.samlpeInCache() {
 		var size uint64
 		if coll.Count > 0 {
