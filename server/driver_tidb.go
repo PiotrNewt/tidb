@@ -244,6 +244,7 @@ func (tc *TiDBContext) WarningCount() uint16 {
 }
 
 // Execute implements QueryCtx Execute method.
+// Query 入口
 func (tc *TiDBContext) Execute(ctx context.Context, sql string) (rs []ResultSet, err error) {
 	rsList, err := tc.session.Execute(ctx, sql)
 	if err != nil {

@@ -633,6 +633,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 	// the status to special values, for example: kill or graceful shutdown.
 	// The client connection would detect the events when it fails to change status
 	// by CAS operation, it would then take some actions accordingly.
+	// @@
 	for {
 		if !atomic.CompareAndSwapInt32(&cc.status, connStatusDispatching, connStatusReading) {
 			return
@@ -643,6 +644,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		waitTimeout := cc.getSessionVarsWaitTimeout(ctx)
 		cc.pkt.setReadTimeout(time.Duration(waitTimeout) * time.Second)
 		start := time.Now()
+		// 获取客户端的数据
 		data, err := cc.readPacket()
 		if err != nil {
 			if terror.ErrorNotEqual(err, io.EOF) {
@@ -669,6 +671,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		}
 
 		startTime := time.Now()
+		// 客户端请求入口
 		if err = cc.dispatch(ctx, data); err != nil {
 			if terror.ErrorEqual(err, io.EOF) {
 				cc.addMetrics(data[0], startTime, nil)
@@ -847,6 +850,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 			data = data[:len(data)-1]
 			dataStr = string(hack.String(data))
 		}
+		// 查询处理入口
 		return cc.handleQuery(ctx, dataStr)
 	case mysql.ComPing:
 		return cc.writeOK()
@@ -1149,6 +1153,7 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 // There is a special query `load data` that does not return result, which is handled differently.
 // Query `load stats` does not return result either.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
+	// exec
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
 		metrics.ExecuteErrorCounter.WithLabelValues(metrics.ExecuteErrorToLabel(err)).Inc()

@@ -222,7 +222,9 @@ func setCPUAffinity() {
 func registerStores() {
 	err := kvstore.Register("tikv", tikv.Driver{})
 	terror.MustNil(err)
+	// 定义 KV 的 GC
 	tikv.NewGCHandlerFunc = gcworker.NewGCWorker
+	// 注册 mockTiKV
 	err = kvstore.Register("mocktikv", mockstore.MockDriver{})
 	terror.MustNil(err)
 }

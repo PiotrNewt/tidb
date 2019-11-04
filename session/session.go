@@ -1049,6 +1049,7 @@ func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode 
 	return recordSets, nil
 }
 
+// Query line @@
 func (s *session) Execute(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("session.Execute", opentracing.ChildOf(span.Context()))
