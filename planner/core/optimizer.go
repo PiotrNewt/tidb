@@ -114,8 +114,9 @@ func CheckTableLock(ctx sessionctx.Context, is infoschema.InfoSchema, vs []visit
 	return nil
 }
 
-// DoOptimize optimizes a logical plan to a physical plan.
+// DoOptimize optimizes a logical plan to a physical plan. @@
 func DoOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (PhysicalPlan, float64, error) {
+	// 逻辑优化 @-@
 	logic, err := logicalOptimize(ctx, flag, logic)
 	if err != nil {
 		return nil, 0, err
@@ -123,6 +124,7 @@ func DoOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (PhysicalPl
 	if !AllowCartesianProduct.Load() && existsCartesianProduct(logic) {
 		return nil, 0, errors.Trace(ErrCartesianProductUnsupported)
 	}
+	// 物理优化 @-@
 	physical, cost, err := physicalOptimize(logic)
 	if err != nil {
 		return nil, 0, err
@@ -160,6 +162,7 @@ func isLogicalRuleDisabled(r logicalOptRule) bool {
 }
 
 func physicalOptimize(logic LogicalPlan) (PhysicalPlan, float64, error) {
+	// get the statistics @-@
 	if _, err := logic.recursiveDeriveStats(); err != nil {
 		return nil, 0, err
 	}

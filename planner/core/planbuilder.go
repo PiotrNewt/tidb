@@ -390,6 +390,7 @@ func (b *PlanBuilder) Build(ctx context.Context, node ast.Node) (Plan, error) {
 	case *ast.PrepareStmt:
 		return b.buildPrepare(x), nil
 	case *ast.SelectStmt:
+		// @@
 		return b.buildSelect(ctx, x)
 	case *ast.UnionStmt:
 		return b.buildUnion(ctx, x)

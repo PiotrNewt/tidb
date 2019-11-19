@@ -1007,6 +1007,7 @@ func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecu
 	s.processInfo.Store(&pi)
 }
 
+// execute physical plan @@
 func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode ast.StmtNode, stmt sqlexec.Statement, recordSets []sqlexec.RecordSet, inMulitQuery bool) ([]sqlexec.RecordSet, error) {
 	s.SetValue(sessionctx.QueryString, stmt.OriginText())
 	if _, ok := stmtNode.(ast.DDLNode); ok {
@@ -1104,6 +1105,7 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 			return nil, err
 		}
+		// complie @-@
 		stmt, err := compiler.Compile(ctx, stmtNode)
 		if err != nil {
 			s.rollbackOnError(ctx)

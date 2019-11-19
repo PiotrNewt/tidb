@@ -68,12 +68,14 @@ func (p *LogicalShowDDLJobs) DeriveStats(childStats []*property.StatsInfo, selfS
 	return p.stats, nil
 }
 
+// get the statistic
 func (p *baseLogicalPlan) recursiveDeriveStats() (*property.StatsInfo, error) {
 	if p.stats != nil {
 		return p.stats, nil
 	}
 	childStats := make([]*property.StatsInfo, len(p.children))
 	childSchema := make([]*expression.Schema, len(p.children))
+	// 递归获得每个孩子的统计信息
 	for i, child := range p.children {
 		childProfile, err := child.recursiveDeriveStats()
 		if err != nil {

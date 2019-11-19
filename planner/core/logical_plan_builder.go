@@ -2204,6 +2204,7 @@ func (b *PlanBuilder) TableHints() *tableHintInfo {
 	return &(b.tableHintInfo[len(b.tableHintInfo)-1])
 }
 
+// buildSelect LogicalPlan enter @-@
 func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p LogicalPlan, err error) {
 	b.pushSelectOffset(sel.QueryBlockOffset)
 	b.pushTableHints(sel.TableHints, typeSelect, sel.QueryBlockOffset)

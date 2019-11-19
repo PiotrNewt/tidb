@@ -38,7 +38,7 @@ import (
 )
 
 // Optimize does optimization and creates a Plan.
-// The node must be prepared first.
+// The node must be prepared first. @@
 func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema) (plannercore.Plan, types.NameSlice, error) {
 	fp := plannercore.TryFastPlan(sctx, node)
 	if fp != nil {
@@ -109,12 +109,13 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 }
 
 func optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema) (plannercore.Plan, types.NameSlice, float64, error) {
-	// build logical plan
+	// build logical plan @@
 	sctx.GetSessionVars().PlanID = 0
 	sctx.GetSessionVars().PlanColumnID = 0
 	hintProcessor := &plannercore.BlockHintProcessor{Ctx: sctx}
 	node.Accept(hintProcessor)
 	builder := plannercore.NewPlanBuilder(sctx, is, hintProcessor)
+	// Build @@
 	p, err := builder.Build(ctx, node)
 	if err != nil {
 		return nil, nil, 0, err
@@ -149,11 +150,12 @@ func optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 		return p, names, 0, nil
 	}
 
-	// Handle the logical plan statement, use cascades planner if enabled.
+	// Handle the logical plan statement, use cascades planner if enabled. @@
 	if sctx.GetSessionVars().EnableCascadesPlanner {
 		finalPlan, cost, err := cascades.DefaultOptimizer.FindBestPlan(sctx, logic)
 		return finalPlan, names, cost, err
 	}
+	// @@
 	finalPlan, cost, err := plannercore.DoOptimize(ctx, builder.GetOptFlag(), logic)
 	return finalPlan, names, cost, err
 }
