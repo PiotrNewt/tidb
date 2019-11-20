@@ -155,7 +155,9 @@ func (ds *DataSource) DeriveStats(childStats []*property.StatsInfo, selfSchema *
 	for i, expr := range ds.pushedDownConds {
 		ds.pushedDownConds[i] = expression.PushDownNot(nil, expr)
 	}
+	// 通过可以下推的 expression 计算出选择率
 	ds.deriveStatsByFilter(ds.pushedDownConds)
+	// 在这里选择表扫的路径
 	for _, path := range ds.possibleAccessPaths {
 		if path.isTablePath {
 			noIntervalRanges, err := ds.deriveTablePathStats(path, ds.pushedDownConds, false)

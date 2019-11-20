@@ -545,6 +545,7 @@ func (ds *DataSource) deriveTablePathStats(path *accessPath, conds []expression.
 	if err != nil {
 		return false, err
 	}
+	// @-@
 	path.countAfterAccess, err = ds.statisticTable.GetRowCountByIntColumnRanges(sc, pkCol.ID, path.ranges)
 	// If the `countAfterAccess` is less than `stats.RowCount`, there must be some inconsistent stats info.
 	// We prefer the `stats.RowCount` because it could use more stats info to calculate the selectivity.
