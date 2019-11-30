@@ -115,7 +115,7 @@ func optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 	hintProcessor := &plannercore.BlockHintProcessor{Ctx: sctx}
 	node.Accept(hintProcessor)
 	builder := plannercore.NewPlanBuilder(sctx, is, hintProcessor)
-	// Build @@
+	// Build @-@
 	p, err := builder.Build(ctx, node)
 	if err != nil {
 		return nil, nil, 0, err

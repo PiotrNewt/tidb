@@ -672,6 +672,7 @@ type pessimisticTxn interface {
 }
 
 // buildExecutor build a executor from plan, prepared statement may need additional procedure.
+// buildExecutor use to build exec @-@
 func (a *ExecStmt) buildExecutor() (Executor, error) {
 	ctx := a.Ctx
 	if _, ok := a.Plan.(*plannercore.Execute); !ok {

@@ -88,6 +88,7 @@ type MockPhysicalPlan interface {
 	GetExecutor() Executor
 }
 
+// build executor @-@
 func (b *executorBuilder) build(p plannercore.Plan) Executor {
 	switch v := p.(type) {
 	case nil:

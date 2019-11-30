@@ -1009,6 +1009,20 @@ func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecu
 
 // execute physical plan @-@
 func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode ast.StmtNode, stmt sqlexec.Statement, recordSets []sqlexec.RecordSet, inMulitQuery bool) ([]sqlexec.RecordSet, error) {
+	/*
+		if executor.GetStmtLabel(stmtNode) == "AnalyzeTable" {
+			fmt.Println("ANALYZE")
+		}
+
+		if executor.GetStmtLabel(stmtNode) == "Show" {
+			fmt.Println("Show")
+		}
+
+		if executor.GetStmtLabel(stmtNode) == "LoadData" {
+			fmt.Println("LoadData")
+		}
+	*/
+
 	s.SetValue(sessionctx.QueryString, stmt.OriginText())
 	if _, ok := stmtNode.(ast.DDLNode); ok {
 		s.SetValue(sessionctx.LastExecuteDDL, true)
@@ -1017,6 +1031,7 @@ func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode 
 	}
 	logStmt(stmtNode, s.sessionVars)
 	startTime := time.Now()
+	// run exe stmt @-@
 	recordSet, err := runStmt(ctx, s, stmt)
 	if err != nil {
 		if !kv.ErrKeyExists.Equal(err) {
@@ -1050,7 +1065,7 @@ func (s *session) executeStatement(ctx context.Context, connID uint64, stmtNode 
 	return recordSets, nil
 }
 
-// Query line @@
+// Query line @-@
 func (s *session) Execute(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
 		span1 := span.Tracer().StartSpan("session.Execute", opentracing.ChildOf(span.Context()))
@@ -1064,6 +1079,7 @@ func (s *session) Execute(ctx context.Context, sql string) (recordSets []sqlexec
 	return
 }
 
+// execute enter @-@
 func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
 	s.PrepareTxnCtx(ctx)
 	connID := s.sessionVars.ConnectionID

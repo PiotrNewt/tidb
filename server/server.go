@@ -413,7 +413,7 @@ func (s *Server) onConn(conn *clientConn) {
 	defer func() {
 		logutil.Logger(ctx).Info("connection closed")
 	}()
-	// 更新连接 Map
+	// 更新连接 Map @-@
 	s.rwlock.Lock()
 	s.clients[conn.connectionID] = conn
 	connections := len(s.clients)

@@ -850,7 +850,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 			data = data[:len(data)-1]
 			dataStr = string(hack.String(data))
 		}
-		// 查询处理入口
+		// 查询处理入口 @-@
 		return cc.handleQuery(ctx, dataStr)
 	case mysql.ComPing:
 		return cc.writeOK()
@@ -1117,7 +1117,7 @@ func (cc *clientConn) handleLoadData(ctx context.Context, loadDataInfo *executor
 	return err
 }
 
-// handleLoadStats does the additional work after processing the 'load stats' query.
+// handleLoadStats does the additional work after processing the 'load stats' query. handleLoadStats@-@
 // It sends client a file path, then reads the file content from client, loads it into the storage.
 func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *executor.LoadStatsInfo) error {
 	// If the server handles the load data request, the client has to set the ClientLocalFiles capability.
@@ -1153,7 +1153,7 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 // There is a special query `load data` that does not return result, which is handled differently.
 // Query `load stats` does not return result either.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
-	// exec
+	// exec @—@
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
 		metrics.ExecuteErrorCounter.WithLabelValues(metrics.ExecuteErrorToLabel(err)).Inc()
