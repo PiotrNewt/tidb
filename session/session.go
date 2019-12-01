@@ -1110,6 +1110,15 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		s.sessionVars.StartTime = time.Now()
 		s.PrepareTxnCtx(ctx)
 
+		// executor indexAdvise, which is a special executor just ues optimaizer
+		if executor.GetStmtLabel(stmtNode) == "IndexAdvise" {
+			err = executor.BuildIndexAdviseExec(s, stmtNode.(*ast.IndexAdviseStmt))
+			if err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
+
 		// Step2: Transform abstract syntax tree to a physical plan(stored in executor.ExecStmt).
 		// Some executions are done in compile stage, so we reset them before compile.
 		if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {

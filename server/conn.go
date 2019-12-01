@@ -1144,6 +1144,47 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 	return loadStatsInfo.Update(prevData)
 }
 
+// FormatIndexAdvice formats the index advice to the ResultSet
+func FormatIndexAdvice(indexAdvice *executor.IndexAdvice) ([]ResultSet, error) {
+	// TODO: Format the results, From IndexAdvice to []ResultSet
+	return nil, nil
+}
+
+// handleIndexAdvise does the index advise work and returns the advise result for index.
+func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseExec *executor.IndexAdviseExec) ([]ResultSet, error) {
+	if cc.capability&mysql.ClientLocalFiles == 0 {
+		return nil, errNotAllowedCommand
+	}
+	err := cc.writeReq(indexAdviseExec.Path)
+	if err != nil {
+		return nil, err
+	}
+	var prevData, curData []byte
+	for {
+		curData, err = cc.readPacket()
+		if err != nil && terror.ErrorNotEqual(err, io.EOF) {
+			return nil, err
+		}
+		if len(curData) == 0 {
+			break
+		}
+		prevData = append(prevData, curData...)
+	}
+	if len(prevData) == 0 {
+		return nil, errors.New("The file is empty")
+	}
+
+	indexAdvice, err := indexAdviseExec.GetIndexAdvice(ctx, prevData)
+	if err != nil {
+		return nil, err
+	}
+	adviceResult, err := FormatIndexAdvice(indexAdvice)
+	if err != nil {
+		return nil, err
+	}
+	return adviceResult, nil
+}
+
 // handleQuery executes the sql query string and writes result set or result ok to the client.
 // As the execution time of this function represents the performance of TiDB, we do time log and metrics here.
 // There is a special query `load data` that does not return result, which is handled differently.
@@ -1182,6 +1223,16 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 			if err = cc.handleLoadStats(ctx, loadStats.(*executor.LoadStatsInfo)); err != nil {
 				return err
 			}
+		}
+
+		indexAdvise := cc.ctx.Value(executor.IndexAdviseKey)
+		if indexAdvise != nil {
+			defer cc.ctx.SetValue(executor.IndexAdviseKey, nil)
+			rss, err = cc.handleIndexAdvise(ctx, indexAdvise.(*executor.IndexAdviseExec))
+			if err != nil {
+				return err
+			}
+			// TODO: Write the rss []ResultSet
 		}
 
 		err = cc.writeOK()
