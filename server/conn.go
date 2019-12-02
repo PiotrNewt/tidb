@@ -1144,26 +1144,20 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 	return loadStatsInfo.Update(prevData)
 }
 
-// FormatIndexAdvice formats the index advice to the ResultSet
-func FormatIndexAdvice(indexAdvice *executor.IndexAdvice) ([]ResultSet, error) {
-	// TODO: Format the results, From IndexAdvice to []ResultSet
-	return nil, nil
-}
-
 // handleIndexAdvise does the index advise work and returns the advise result for index.
-func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseExec *executor.IndexAdviseExec) ([]ResultSet, error) {
+func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseExec *executor.IndexAdviseExec) error {
 	if cc.capability&mysql.ClientLocalFiles == 0 {
-		return nil, errNotAllowedCommand
+		return errNotAllowedCommand
 	}
 	err := cc.writeReq(indexAdviseExec.Path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var prevData, curData []byte
 	for {
 		curData, err = cc.readPacket()
 		if err != nil && terror.ErrorNotEqual(err, io.EOF) {
-			return nil, err
+			return err
 		}
 		if len(curData) == 0 {
 			break
@@ -1171,18 +1165,15 @@ func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseExec *ex
 		prevData = append(prevData, curData...)
 	}
 	if len(prevData) == 0 {
-		return nil, errors.New("The file is empty")
+		return errors.New("The file is empty")
 	}
 
-	indexAdvice, err := indexAdviseExec.GetIndexAdvice(ctx, prevData)
-	if err != nil {
-		return nil, err
+	if err := indexAdviseExec.GetIndexAdvice(ctx, prevData); err != nil {
+		return err
 	}
-	adviceResult, err := FormatIndexAdvice(indexAdvice)
-	if err != nil {
-		return nil, err
-	}
-	return adviceResult, nil
+
+	// TODO: Write the rss []ResultSet
+	return nil
 }
 
 // handleQuery executes the sql query string and writes result set or result ok to the client.
@@ -1228,11 +1219,10 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 		indexAdvise := cc.ctx.Value(executor.IndexAdviseKey)
 		if indexAdvise != nil {
 			defer cc.ctx.SetValue(executor.IndexAdviseKey, nil)
-			rss, err = cc.handleIndexAdvise(ctx, indexAdvise.(*executor.IndexAdviseExec))
+			err = cc.handleIndexAdvise(ctx, indexAdvise.(*executor.IndexAdviseExec))
 			if err != nil {
 				return err
 			}
-			// TODO: Write the rss []ResultSet
 		}
 
 		err = cc.writeOK()

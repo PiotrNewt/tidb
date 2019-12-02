@@ -1110,7 +1110,7 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		s.sessionVars.StartTime = time.Now()
 		s.PrepareTxnCtx(ctx)
 
-		// executor indexAdvise, which is a special executor just ues optimaizer
+		// Executor indexAdvise, which is a special executor just ues optimaizer
 		if executor.GetStmtLabel(stmtNode) == "IndexAdvise" {
 			err = executor.BuildIndexAdviseExec(s, stmtNode.(*ast.IndexAdviseStmt))
 			if err != nil {

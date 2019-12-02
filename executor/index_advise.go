@@ -34,6 +34,7 @@ type IndexAdviseExec struct {
 	LinesInfo   *ast.LinesClause
 	Ctx         sessionctx.Context
 	StmtNodes   [][]ast.StmtNode
+	Result      *IndexAdvice
 	// TODO: Some member variables required during execution can be defined here.
 }
 
@@ -59,11 +60,6 @@ func BuildIndexAdviseExec(ctx sessionctx.Context, node *ast.IndexAdviseStmt) err
 	}
 	ctx.SetValue(IndexAdviseKey, e)
 	return nil
-}
-
-// IndexAdvice represents the index advice.
-type IndexAdvice struct {
-	// TODO: Define index advice data structure.
 }
 
 func (e *IndexAdviseExec) getSqls(data []byte) []string {
@@ -92,12 +88,18 @@ func (e *IndexAdviseExec) getStmtNodes(data []byte) error {
 }
 
 // GetIndexAdvice gets the index advise by workload file.
-func (e *IndexAdviseExec) GetIndexAdvice(ctx context.Context, data []byte) (*IndexAdvice, error) {
+func (e *IndexAdviseExec) GetIndexAdvice(ctx context.Context, data []byte) error {
 	if err := e.getStmtNodes(data); err != nil {
-		return nil, err
+		return err
 	}
 	// TODO: Finish the index advise process
-	return nil, nil
+	return nil
+}
+
+// IndexAdvice represents the index advice.
+type IndexAdvice struct {
+	// TODO: Define index advice data structure.
+	// TODO: Implements the ResultSet interface.
 }
 
 // IndexAdviseKeyType is a dummy type to avoid naming collision in context.
