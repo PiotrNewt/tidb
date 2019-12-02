@@ -15,7 +15,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"unsafe"
 
@@ -66,18 +65,14 @@ func (e *IndexAdviseExec) getSqls(data []byte) []string {
 	str := *(*string)(unsafe.Pointer(&data))
 	// TODO: Do some work by LineInfo.
 	strs := strings.Split(str, ";")
-	for _, s := range strs {
-		b := strings.HasPrefix(s, e.LinesInfo.Starting)
-		fmt.Println(b)
-	}
 	return strs
 }
 
 func (e *IndexAdviseExec) getStmtNodes(data []byte) error {
 	sqls := e.getSqls(data)
 	e.StmtNodes = make([][]ast.StmtNode, len(sqls))
-	sqlParser := parser.New()
 	for i, sql := range sqls {
+		sqlParser := parser.New()
 		stmtNodes, _, err := sqlParser.Parse(sql, "", "")
 		if err != nil {
 			return err
