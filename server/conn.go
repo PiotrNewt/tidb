@@ -1145,11 +1145,15 @@ func (cc *clientConn) handleLoadStats(ctx context.Context, loadStatsInfo *execut
 }
 
 // handleIndexAdvise does the index advise work and returns the advise result for index.
-func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseExec *executor.IndexAdviseExec) error {
+func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseInfo *executor.IndexAdviseInfo) error {
 	if cc.capability&mysql.ClientLocalFiles == 0 {
 		return errNotAllowedCommand
 	}
-	err := cc.writeReq(indexAdviseExec.Path)
+	if indexAdviseInfo == nil {
+		return errors.New("Index Advise: info is empty")
+	}
+
+	err := cc.writeReq(indexAdviseInfo.Path)
 	if err != nil {
 		return err
 	}
@@ -1168,7 +1172,7 @@ func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseExec *ex
 		return errors.New("The file is empty")
 	}
 
-	if err := indexAdviseExec.GetIndexAdvice(ctx, prevData); err != nil {
+	if err := indexAdviseInfo.GetIndexAdvice(ctx, prevData); err != nil {
 		return err
 	}
 
@@ -1219,7 +1223,7 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 		indexAdvise := cc.ctx.Value(executor.IndexAdviseKey)
 		if indexAdvise != nil {
 			defer cc.ctx.SetValue(executor.IndexAdviseKey, nil)
-			err = cc.handleIndexAdvise(ctx, indexAdvise.(*executor.IndexAdviseExec))
+			err = cc.handleIndexAdvise(ctx, indexAdvise.(*executor.IndexAdviseInfo))
 			if err != nil {
 				return err
 			}

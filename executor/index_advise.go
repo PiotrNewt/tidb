@@ -22,11 +22,44 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util/chunk"
 )
 
-// IndexAdviseExec represents a special executor which used to advise index.
+// IndexAdviseExec represents a index advise executor.
 type IndexAdviseExec struct {
-	IsLocal     bool
+	baseExecutor
+
+	IsLocal         bool
+	indexAdviseInfo *IndexAdviseInfo
+}
+
+// Next implements the Executor Next interface.
+func (e *IndexAdviseExec) Next(ctx context.Context, req *chunk.Chunk) error {
+	req.GrowAndReset(e.maxChunkSize)
+	if !e.IsLocal {
+		return errors.New("Index Advise: don't support load data without local field")
+	}
+
+	if val := e.ctx.Value(IndexAdviseKey); val != nil {
+		e.ctx.SetValue(IndexAdviseKey, nil)
+		return errors.New("Index Advise: there is already an IndexAdviseExec running in the session")
+	}
+	e.ctx.SetValue(IndexAdviseKey, e.indexAdviseInfo)
+	return nil
+}
+
+// Close implements the Executor Close interface.
+func (e *IndexAdviseExec) Close() error {
+	return nil
+}
+
+// Open implements the Executor Open interface.
+func (e *IndexAdviseExec) Open(ctx context.Context) error {
+	return nil
+}
+
+// IndexAdviseInfo saves the information of index advise operation.
+type IndexAdviseInfo struct {
 	Path        string
 	MaxMinutes  uint64
 	MaxIndexNum *ast.MaxIndexNumClause
@@ -34,10 +67,10 @@ type IndexAdviseExec struct {
 	Ctx         sessionctx.Context
 	StmtNodes   [][]ast.StmtNode
 	Result      *IndexAdvice
-	// TODO: Some member variables required during execution can be defined here.
 }
 
 // BuildIndexAdviseExec is a special executor builder for index advise.
+/*
 func BuildIndexAdviseExec(ctx sessionctx.Context, node *ast.IndexAdviseStmt) error {
 	// TODO: Do some judgment when building the exec with AST node
 	e := &IndexAdviseExec{
@@ -60,15 +93,16 @@ func BuildIndexAdviseExec(ctx sessionctx.Context, node *ast.IndexAdviseStmt) err
 	ctx.SetValue(IndexAdviseKey, e)
 	return nil
 }
+*/
 
-func (e *IndexAdviseExec) getSqls(data []byte) []string {
+func (e *IndexAdviseInfo) getSqls(data []byte) []string {
 	str := *(*string)(unsafe.Pointer(&data))
 	// TODO: Do some work by LineInfo.
 	strs := strings.Split(str, ";")
 	return strs
 }
 
-func (e *IndexAdviseExec) getStmtNodes(data []byte) error {
+func (e *IndexAdviseInfo) getStmtNodes(data []byte) error {
 	sqls := e.getSqls(data)
 	e.StmtNodes = make([][]ast.StmtNode, len(sqls))
 	for i, sql := range sqls {
@@ -82,8 +116,8 @@ func (e *IndexAdviseExec) getStmtNodes(data []byte) error {
 	return nil
 }
 
-// GetIndexAdvice gets the index advise by workload file.
-func (e *IndexAdviseExec) GetIndexAdvice(ctx context.Context, data []byte) error {
+// GetIndexAdvice gets the index advice by workload file.
+func (e *IndexAdviseInfo) GetIndexAdvice(ctx context.Context, data []byte) error {
 	if err := e.getStmtNodes(data); err != nil {
 		return err
 	}

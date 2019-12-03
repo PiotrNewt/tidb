@@ -76,16 +76,14 @@ func (e *LoadDataExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		return errors.New("Load Data: don't support load data terminated is nil")
 	}
 
-	sctx := e.loadDataInfo.ctx
-	val := sctx.Value(LoadDataVarKey)
-	if val != nil {
-		sctx.SetValue(LoadDataVarKey, nil)
+	if val := e.ctx.Value(LoadDataVarKey); val != nil {
+		e.ctx.SetValue(LoadDataVarKey, nil)
 		return errors.New("Load Data: previous load data option isn't closed normal")
 	}
 	if e.loadDataInfo.Path == "" {
 		return errors.New("Load Data: infile path is empty")
 	}
-	sctx.SetValue(LoadDataVarKey, e.loadDataInfo)
+	e.ctx.SetValue(LoadDataVarKey, e.loadDataInfo)
 
 	return nil
 }
