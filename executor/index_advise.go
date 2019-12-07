@@ -15,6 +15,8 @@ package executor
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"strings"
 	"unsafe"
 
@@ -38,6 +40,9 @@ func (e *IndexAdviseExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.GrowAndReset(e.maxChunkSize)
 	if !e.IsLocal {
 		return errors.New("Index Advise: don't support load data without local field")
+	}
+	if e.indexAdviseInfo.Path == "" {
+		return errors.New("Index Advise: infile path is empty")
 	}
 
 	if val := e.ctx.Value(IndexAdviseKey); val != nil {
@@ -69,41 +74,20 @@ type IndexAdviseInfo struct {
 	Result      *IndexAdvice
 }
 
-// BuildIndexAdviseExec is a special executor builder for index advise.
-/*
-func BuildIndexAdviseExec(ctx sessionctx.Context, node *ast.IndexAdviseStmt) error {
-	// TODO: Do some judgment when building the exec with AST node
-	e := &IndexAdviseExec{
-		IsLocal:     node.IsLocal,
-		Path:        node.Path,
-		MaxMinutes:  node.MaxMinutes,
-		MaxIndexNum: node.MaxIndexNum,
-		LinesInfo:   node.LinesInfo,
-		Ctx:         ctx,
-	}
-	if !e.IsLocal {
-		return errors.New("Index Advise: don't support load data without local field")
-	}
-	if e.Path == "" {
-		return errors.New("Index Advise: infile path is empty")
-	}
-	if val := ctx.Value(IndexAdviseKey); val != nil {
-		return errors.New("Index Advise: there is already an IndexAdviseExec running in the session")
-	}
-	ctx.SetValue(IndexAdviseKey, e)
-	return nil
-}
-*/
-
-func (e *IndexAdviseInfo) getSqls(data []byte) []string {
-	str := *(*string)(unsafe.Pointer(&data))
-	// TODO: Do some work by LineInfo.
-	strs := strings.Split(str, ";")
-	return strs
-}
-
 func (e *IndexAdviseInfo) getStmtNodes(data []byte) error {
-	sqls := e.getSqls(data)
+	str := *(*string)(unsafe.Pointer(&data))
+	sqls := strings.Split(str, e.LinesInfo.Terminated)
+
+	j := 0
+	for i, sql := range sqls {
+		if sql != "\n" && sql != "" && strings.HasPrefix(sql, e.LinesInfo.Starting) {
+			sqls[j] = sqls[i]
+			j++
+		}
+	}
+	sqls = sqls[:j]
+	fmt.Println(len(sqls))
+
 	e.StmtNodes = make([][]ast.StmtNode, len(sqls))
 	for i, sql := range sqls {
 		sqlParser := parser.New()
@@ -116,19 +100,40 @@ func (e *IndexAdviseInfo) getStmtNodes(data []byte) error {
 	return nil
 }
 
-// GetIndexAdvice gets the index advice by workload file.
-func (e *IndexAdviseInfo) GetIndexAdvice(ctx context.Context, data []byte) error {
+func (e *IndexAdviseInfo) prepareInfo(data []byte) error {
 	if err := e.getStmtNodes(data); err != nil {
 		return err
 	}
-	// TODO: Finish the index advise process
+	if e.MaxMinutes == 0 {
+		e.MaxMinutes = math.MaxUint64
+	}
+	if e.MaxIndexNum == nil {
+		e.MaxIndexNum = &ast.MaxIndexNumClause{
+			PerTable: math.MaxUint64,
+			PerDB:    math.MaxUint64,
+		}
+	}
+	if e.MaxIndexNum.PerTable == 0 {
+		e.MaxIndexNum.PerTable = math.MaxUint64
+	}
+	if e.MaxIndexNum.PerDB == 0 {
+		e.MaxIndexNum.PerDB = math.MaxUint64
+	}
+	return nil
+}
+
+// GetIndexAdvice gets the index advice by workload file.
+func (e *IndexAdviseInfo) GetIndexAdvice(ctx context.Context, data []byte) error {
+	if err := e.prepareInfo(data); err != nil {
+		return nil
+	}
+	// TODO: Finish the index advise process. It will be done in another PR.
 	return nil
 }
 
 // IndexAdvice represents the index advice.
 type IndexAdvice struct {
-	// TODO: Define index advice data structure.
-	// TODO: Implements the ResultSet interface.
+	// TODO: Define index advice data structure and implements the ResultSet interface. It will be done in another PR
 }
 
 // IndexAdviseKeyType is a dummy type to avoid naming collision in context.
