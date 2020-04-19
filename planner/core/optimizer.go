@@ -15,6 +15,8 @@ package core
 
 import (
 	"math"
+	"math/rand"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -120,19 +122,54 @@ func postOptimize(plan PhysicalPlan) PhysicalPlan {
 	return plan
 }
 
+// func logicalOptimize(flag uint64, logic LogicalPlan) (LogicalPlan, error) {
+// 	var err error
+// 	for i, rule := range optRuleList {
+// 		// The order of flags is same as the order of optRule in the list.
+// 		// We use a bitmask to record which opt rules should be used. If the i-th bit is 1, it means we should
+// 		// apply i-th optimizing rule.
+// 		if flag&(1<<uint(i)) == 0 {
+// 			continue
+// 		}
+// 		logic, err = rule.optimize(logic)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+// 	return logic, err
+// }
+
+func randInt(min, max int) int {
+	rand.Seed(time.Now().UnixNano())
+	return min + rand.Intn(max-min)
+}
+
 func logicalOptimize(flag uint64, logic LogicalPlan) (LogicalPlan, error) {
-	var err error
-	for i, rule := range optRuleList {
-		// The order of flags is same as the order of optRule in the list.
-		// We use a bitmask to record which opt rules should be used. If the i-th bit is 1, it means we should
-		// apply i-th optimizing rule.
+	// get the useable logical rule by flag
+	rules := make([]logicalOptRule,0,)
+	for i, rule := range optRuleList  {
 		if flag&(1<<uint(i)) == 0 {
 			continue
 		}
+		//number of rules will not over 10, so there will not be a bottleneck
+		rules = append(rules, rule)
+	}
+
+	var err error
+	count := len(rules)
+	for count > 0 {
+		idx := randInt(0, count-1)
+		rule := rules[idx]
+
 		logic, err = rule.optimize(logic)
 		if err != nil {
 			return nil, err
 		}
+
+		// reset the optRuleList
+		rules[idx], rules[count-1] = rules[count-1], rules[idx]
+		count--
+		rules = rules[:count-1]
 	}
 	return logic, err
 }
