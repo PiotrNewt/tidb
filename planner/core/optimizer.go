@@ -148,12 +148,16 @@ func postOptimize(sctx sessionctx.Context, plan PhysicalPlan) PhysicalPlan {
 }
 
 func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (LogicalPlan, error) {
+	// there are 14 rules
+	// notes buildKeySolver is idx-2th rule
+	order := []int{0, 1, 2, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3}
 	var err error
-	for i, rule := range optRuleList {
+	for _, idx := range order {
 		// The order of flags is same as the order of optRule in the list.
 		// We use a bitmask to record which opt rules should be used. If the i-th bit is 1, it means we should
 		// apply i-th optimizing rule.
-		if flag&(1<<uint(i)) == 0 || isLogicalRuleDisabled(rule) {
+		rule := optRuleList[idx]
+		if flag&(1<<uint(idx)) == 0 || isLogicalRuleDisabled(rule) {
 			continue
 		}
 		logic, err = rule.optimize(ctx, logic)
