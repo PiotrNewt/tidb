@@ -149,8 +149,12 @@ func postOptimize(sctx sessionctx.Context, plan PhysicalPlan) PhysicalPlan {
 
 func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (LogicalPlan, error) {
 	// there are 14 rules
-	// notes buildKeySolver is idx-2th rule
-	order := []int{0, 1, 2, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3}
+	// notes:
+	// 1. buildKeySolver is idx-2th rule
+	// 2. columnPruner is idx-1 and 13th rule, we do column again after joinReoder
+	// 3. joinReoder is idx-12th rule
+	// 4. decorrelateSolver is idx-3th rule
+	order := []int{0, 1, 2, 3, 4, 6, 7, 9, 5, 8, 10, 11, 12, 13}
 	var err error
 	for _, idx := range order {
 		// The order of flags is same as the order of optRule in the list.
