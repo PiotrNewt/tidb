@@ -15,6 +15,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/pingcap/errors"
@@ -148,6 +149,13 @@ func postOptimize(sctx sessionctx.Context, plan PhysicalPlan) PhysicalPlan {
 }
 
 func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (LogicalPlan, error) {
+	sctx := logic.SCtx()
+	sessionVars := sctx.GetSessionVars()
+	sql := sessionVars.StmtCtx.OriginalSQL
+	// a lot of info can be used in sessionVars
+	// something may can be used in sessionVars.StmtCtx
+	fmt.Println("process sql:", sql)
+
 	// there are 14 rules
 	// notes:
 	// 1. buildKeySolver is idx-2th rule
