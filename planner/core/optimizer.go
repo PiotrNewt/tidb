@@ -176,6 +176,7 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 		if err != nil {
 			return nil, err
 		}
+		fmt.Println(GetFeatureOFLogicalPlan(logic))
 	}
 	return logic, err
 }
