@@ -29,7 +29,7 @@ func GetFeatureOFLogicalPlan(logic LogicalPlan) string {
 // RequestMessage represent message from tidb to rl-server. (just for experiment)
 type RequestMessage struct {
 	SQL            string
-	LogicalPlanSeq string
+	LogicalPlanSeq string // LogicalPlanSeq will like "{s[s(e<a>)]}"
 }
 
 func getFeature(ctx sessionctx.Context, logic LogicalPlan) *RequestMessage {
@@ -54,15 +54,57 @@ type Feature interface {
 // Traversal implements the Feature Traversal interface.
 func (agg *LogicalAggregation) Traversal(r *RequestMessage) *RequestMessage {
 	collectSeq := agg.TP()
+	aggfuncStr := ""
+	if len(agg.AggFuncs) != 0 {
+		for _, f := range agg.AggFuncs {
+			// "(" + + ")"
+			aggfuncStr += "(aggfunc "
+			aggfuncStr += "<name-" + f.baseFuncDesc.Name + ">"
+			aggfuncStr += "<mode-" + f.Mode + ">"
+			aggfuncStr += ")"
+		}
+	}
+
+	groupByItemStr := ""
+	if len(agg.GroupByItems) != 0 {
+		for _, e := range agg.GroupByItems {
+			groupByItemStr += "(groupByItems "
+			groupByItemStr += "<info-" + e.ExplainInfo() + ">"
+			co := "0"
+			if e.IsCorrelated {
+				co = "1"
+			}
+			groupByItrmStr += "<correlated-" + co + ">"
+		}
+	}
+
+	groupByColStr := ""
+	if len(agg.groupByCols) != 0 {
+		for _, c := range agg.groupByCols {
+			groupByColStr += "(groupByCols "
+			groupByColStr += "<id-" + c.UniqueID + ">"
+			groupByColStr += "<name-" + c.OrigName + ">"
+			b := "0"
+			if c.InOperand {
+				b = "1"
+			}
+			groupByColStr += "<isInOperand" + b + ">"
+			groupByColStr += "(groupByCols "
+		}
+	}
+
+	collectSeq += "[" + aggfuncStr + groupByItem + groupByColStr
 	children := agg.Children()
 	if len(children) == 0 {
-		r.LogicalPlanSeq += collectSeq
+		r.LogicalPlanSeq += collectSeq + "]"
 		return r
 	}
 
-	if len(AggFuncs) != 0 {
-
+	for child := range chilren {
+		r.LogicalPlanSeq += chilren.Traversal(r)
 	}
+	r.LogicalPlanSeq += chilren.Traversal(r) + "]"
+	return r
 }
 
 /*
