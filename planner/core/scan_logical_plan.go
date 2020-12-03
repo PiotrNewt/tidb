@@ -3,6 +3,7 @@
 package core
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/pingcap/tidb/expression"
@@ -38,7 +39,7 @@ func getFeature(logic LogicalPlan) *RequestMessage {
 	sctx := logic.SCtx()
 	sessionVars := sctx.GetSessionVars()
 	sql := sessionVars.StmtCtx.OriginalSQL
-	seq := logic.Traversal()
+	seq := logic.GetFeature()
 	rm := &RequestMessage{
 		SQL:            sql,
 		LogicalPlanSeq: seq,
@@ -46,10 +47,12 @@ func getFeature(logic LogicalPlan) *RequestMessage {
 	return rm
 }
 
-// Feature interface use to extract feature of logical plan.
-type Feature interface {
-	// Traversal use to traversal logical plan
-	Traversal() string
+func getFeatureAsJSON(logic LogicalPlan) []byte {
+	b, err := json.Marshal(logic)
+	if err != nil {
+		return []byte{}
+	}
+	return b
 }
 
 func bool2str(b bool) string {
@@ -105,18 +108,18 @@ func getChildrenSeq(l LogicalPlan) string {
 		return seq
 	}
 	for _, child := range children {
-		seq += child.Traversal()
+		seq += child.GetFeature()
 	}
 	return seq
 }
 
-// Traversal implements the Feature Traversal interface.
-func (p *baseLogicalPlan) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (p *baseLogicalPlan) GetFeature() string {
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (join *LogicalJoin) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (join *LogicalJoin) GetFeature() string {
 	collectSeq := join.TP()
 	joinInfoStr := "(info "
 	joinInfoStr += "<jointype-" + strconv.Itoa(int(join.JoinType)) + ">"
@@ -159,8 +162,8 @@ func (join *LogicalJoin) Traversal() string {
 	return collectSeq
 }
 
-// Traversal implements the Feature Traversal interface.
-func (agg *LogicalAggregation) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (agg *LogicalAggregation) GetFeature() string {
 	collectSeq := agg.TP()
 	aggfuncStr := ""
 	if agg.AggFuncs != nil && len(agg.AggFuncs) != 0 {
@@ -189,103 +192,86 @@ func (agg *LogicalAggregation) Traversal() string {
 	return collectSeq
 }
 
-// Traversal implements the Feature Traversal interface.
-func (proj *LogicalProjection) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (proj *LogicalProjection) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (sele *LogicalSelection) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (sele *LogicalSelection) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (apply *LogicalApply) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (apply *LogicalApply) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (m *LogicalMaxOneRow) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (m *LogicalMaxOneRow) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (td *LogicalTableDual) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (td *LogicalTableDual) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (d *DataSource) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (d *DataSource) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (g *TiKVSingleGather) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (g *TiKVSingleGather) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (tabScan *LogicalTableScan) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (tabScan *LogicalTableScan) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (idxScan LogicalIndexScan) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (idxScan LogicalIndexScan) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (u *LogicalUnionAll) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (u *LogicalUnionAll) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (sort *LogicalSort) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (sort *LogicalSort) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (lock *LogicalLock) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (lock *LogicalLock) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (limit *LogicalLimit) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (limit *LogicalLimit) GetFeature() string {
 	// TODO
 	return ""
 }
 
-// Traversal implements the Feature Traversal interface.
-func (win *LogicalWindow) Traversal() string {
+// GetFeature implements the Feature GetFeature interface.
+func (win *LogicalWindow) GetFeature() string {
 	// TODO
-	return ""
-}
-
-// Traversal implements the Feature Traversal interface.
-func (l *LogicalUnionScan) Traversal() string {
-	//TODO
-	return ""
-}
-
-// Traversal implements the Feature Traversal interface.
-func (topn *LogicalTopN) Traversal() string {
-	// TODO
-	return ""
-}
-
-// Traversal implements the Feature Traversal interface.
-func (s *logicalSchemaProducer) Traversal() string {
 	return ""
 }

@@ -197,6 +197,9 @@ type LogicalPlan interface {
 
 	// SetChild sets the ith child for the plan.
 	SetChild(i int, child LogicalPlan)
+
+	// GetFeature get feature of logical plan.
+	GetFeature() string
 }
 
 // PhysicalPlan is a tree of the physical operators.
