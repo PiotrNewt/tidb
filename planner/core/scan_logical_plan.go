@@ -3,7 +3,9 @@
 package core
 
 import (
-	"github.com/pingcap/tidb/sessionctx"
+	"strconv"
+
+	"github.com/pingcap/tidb/expression"
 )
 
 // GetFeatureOFLogicalPlan scan the logical plan from top node to the buttom.
@@ -32,35 +34,141 @@ type RequestMessage struct {
 	LogicalPlanSeq string // LogicalPlanSeq will like "{s[s(e<a>)]}"
 }
 
-func getFeature(ctx sessionctx.Context, logic LogicalPlan) *RequestMessage {
+func getFeature(logic LogicalPlan) *RequestMessage {
 	sctx := logic.SCtx()
 	sessionVars := sctx.GetSessionVars()
 	sql := sessionVars.StmtCtx.OriginalSQL
+	seq := logic.Traversal()
 	rm := &RequestMessage{
-		SQL: sql,
+		SQL:            sql,
+		LogicalPlanSeq: seq,
 	}
-	return logic.Traversal(rm)
+	return rm
 }
 
 // Feature interface use to extract feature of logical plan.
 type Feature interface {
 	// Traversal use to traversal logical plan
-	Traversal()
+	Traversal() string
+}
+
+func bool2str(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+func getExpressionStr(e expression.Expression) string {
+	s := "(exprs "
+	s += "<info-" + e.ExplainInfo() + ">"
+	s += "<correlated-" + bool2str(e.IsCorrelated()) + ">)"
+	return s
+}
+
+func getExpressionArrayStr(es []expression.Expression) string {
+	if len(es) == 0 {
+		return ""
+	}
+
+	s := ""
+	for _, e := range es {
+		s += getExpressionStr(e)
+	}
+	return s
+}
+
+func getExpressionColsStr(col *expression.Column) string {
+	s := "(col"
+	s += "<id-" + strconv.FormatInt(col.UniqueID, 10) + ">"
+	s += "<name-" + col.OrigName + ">"
+	s += "<isInOperand" + bool2str(col.InOperand) + ">)"
+	return s
+}
+
+func getExpressionColsArrayStr(cols []*expression.Column) string {
+	if len(cols) == 0 {
+		return ""
+	}
+
+	s := ""
+	for _, c := range cols {
+		s += getExpressionColsStr(c)
+	}
+	return s
+}
+
+func getChildrenSeq(l LogicalPlan) string {
+	children := l.Children()
+	seq := ""
+	if len(children) == 0 {
+		return seq
+	}
+	for _, child := range children {
+		seq += child.Traversal()
+	}
+	return seq
 }
 
 // Traversal implements the Feature Traversal interface.
-// func (join *LogicalJoin) Traversal() {}
+func (p *baseLogicalPlan) Traversal() string {
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (agg *LogicalAggregation) Traversal(r *RequestMessage) *RequestMessage {
+func (join *LogicalJoin) Traversal() string {
+	collectSeq := join.TP()
+	joinInfoStr := "(info "
+	joinInfoStr += "<jointype-" + strconv.Itoa(int(join.JoinType)) + ">"
+	joinInfoStr += "<reorderd-" + bool2str(join.reordered) + ">"
+	joinInfoStr += "<cartesian-" + bool2str(join.cartesianJoin) + ">"
+	joinInfoStr += "<straightJoin-" + bool2str(join.StraightJoin) + ">"
+	joinInfoStr += "<preferJoinType-" + strconv.Itoa(int(join.preferJoinType)) + ">)"
+
+	conditionStr := ""
+	if join.EqualConditions != nil && len(join.EqualConditions) != 0 {
+		for _, c := range join.EqualConditions {
+			coditionStr := "(scalarFunction "
+			coditionStr += "<" + c.FuncName.O + c.FuncName.L + ">"
+			coditionStr += ")"
+		}
+	}
+
+	if join.LeftConditions != nil {
+		conditionStr += getExpressionArrayStr(join.LeftConditions)
+	}
+	if join.RightConditions != nil {
+		conditionStr += getExpressionArrayStr(join.RightConditions)
+	}
+	if join.OtherConditions != nil {
+		conditionStr += getExpressionArrayStr(join.OtherConditions)
+	}
+
+	columnsStr := ""
+	if join.leftProperties != nil {
+		for _, cols := range join.leftProperties {
+			columnsStr += getExpressionColsArrayStr(cols)
+		}
+	}
+	if join.rightProperties != nil {
+		for _, cols := range join.rightProperties {
+			columnsStr += getExpressionColsArrayStr(cols)
+		}
+	}
+	collectSeq += "[" + joinInfoStr + conditionStr + columnsStr + getChildrenSeq(join) + "]"
+	return collectSeq
+}
+
+// Traversal implements the Feature Traversal interface.
+func (agg *LogicalAggregation) Traversal() string {
 	collectSeq := agg.TP()
 	aggfuncStr := ""
-	if len(agg.AggFuncs) != 0 {
+	if agg.AggFuncs != nil && len(agg.AggFuncs) != 0 {
 		for _, f := range agg.AggFuncs {
 			// "(" + + ")"
 			aggfuncStr += "(aggfunc "
-			aggfuncStr += "<name-" + f.baseFuncDesc.Name + ">"
-			aggfuncStr += "<mode-" + f.Mode + ">"
+			aggfuncStr += "<name-" + f.Name + ">"
+			aggfuncStr += "<mode-" + strconv.Itoa(int(f.Mode)) + ">"
 			aggfuncStr += ")"
 		}
 	}
@@ -68,85 +176,116 @@ func (agg *LogicalAggregation) Traversal(r *RequestMessage) *RequestMessage {
 	groupByItemStr := ""
 	if len(agg.GroupByItems) != 0 {
 		for _, e := range agg.GroupByItems {
-			groupByItemStr += "(groupByItems "
-			groupByItemStr += "<info-" + e.ExplainInfo() + ">"
-			co := "0"
-			if e.IsCorrelated {
-				co = "1"
-			}
-			groupByItrmStr += "<correlated-" + co + ">"
+			groupByItemStr += getExpressionStr(e)
 		}
 	}
 
 	groupByColStr := ""
 	if len(agg.groupByCols) != 0 {
-		for _, c := range agg.groupByCols {
-			groupByColStr += "(groupByCols "
-			groupByColStr += "<id-" + c.UniqueID + ">"
-			groupByColStr += "<name-" + c.OrigName + ">"
-			b := "0"
-			if c.InOperand {
-				b = "1"
-			}
-			groupByColStr += "<isInOperand" + b + ">"
-			groupByColStr += "(groupByCols "
-		}
+		groupByColStr += getExpressionColsArrayStr(agg.groupByCols)
 	}
 
-	collectSeq += "[" + aggfuncStr + groupByItem + groupByColStr
-	children := agg.Children()
-	if len(children) == 0 {
-		r.LogicalPlanSeq += collectSeq + "]"
-		return r
-	}
-
-	for child := range chilren {
-		r.LogicalPlanSeq += chilren.Traversal(r)
-	}
-	r.LogicalPlanSeq += chilren.Traversal(r) + "]"
-	return r
+	collectSeq += "[" + aggfuncStr + groupByItemStr + groupByColStr + getChildrenSeq(agg) + "]"
+	return collectSeq
 }
 
-/*
 // Traversal implements the Feature Traversal interface.
-func (proj *LogicalProjection) Traversal() {}
+func (proj *LogicalProjection) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (sele *LogicalSelection) Traversal() {}
+func (sele *LogicalSelection) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (apply *LogicalApply) Traversal() {}
+func (apply *LogicalApply) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (m *LogicalMaxOneRow) Traversal() {}
+func (m *LogicalMaxOneRow) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (td *LogicalTableDual) Traversal() {}
+func (td *LogicalTableDual) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (d *DataSource) Traversal() {}
+func (d *DataSource) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (g *TiKVSingleGather) Traversal() {}
+func (g *TiKVSingleGather) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (tabScan *LogicalTableScan) Traversal() {}
+func (tabScan *LogicalTableScan) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (idxScan LogicalIndexScan) Traversal() {}
+func (idxScan LogicalIndexScan) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (u *LogicalUnionAll) Traversal() {}
+func (u *LogicalUnionAll) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (sort *LogicalSort) Traversal() {}
+func (sort *LogicalSort) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (lock *LogicalLock) Traversal() {}
+func (lock *LogicalLock) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (limit *LogicalLimit) Traversal() {}
+func (limit *LogicalLimit) Traversal() string {
+	// TODO
+	return ""
+}
 
 // Traversal implements the Feature Traversal interface.
-func (win *LogicalWindow) Traversal() {}
-*/
+func (win *LogicalWindow) Traversal() string {
+	// TODO
+	return ""
+}
+
+// Traversal implements the Feature Traversal interface.
+func (l *LogicalUnionScan) Traversal() string {
+	//TODO
+	return ""
+}
+
+// Traversal implements the Feature Traversal interface.
+func (topn *LogicalTopN) Traversal() string {
+	// TODO
+	return ""
+}
+
+// Traversal implements the Feature Traversal interface.
+func (s *logicalSchemaProducer) Traversal() string {
+	return ""
+}
