@@ -726,9 +726,16 @@ func (e *ErrorRate) Merge(rate *ErrorRate) {
 	e.ErrorTotal += rate.ErrorTotal
 }
 
+// SampleCol represents the sample of a column.
+type SampleCol struct {
+	SID          int64
+	SampleColumn *chunk.Column
+}
+
 // Column represents a column histogram.
 type Column struct {
 	Histogram
+	*SampleCol // Sample on one column.
 	*CMSketch
 	PhysicalID int64
 	Count      int64
@@ -807,7 +814,7 @@ func (c *Column) GetColumnRowCount(sc *stmtctx.StatementContext, ranges []*range
 			if !rg.LowExclude && !rg.HighExclude {
 				// In this case, the row count is at most 1.
 				if pkIsHandle {
-					rowCount += 1
+					rowCount++
 					continue
 				}
 				var cnt float64
@@ -869,6 +876,7 @@ func (c *Column) GetColumnRowCount(sc *stmtctx.StatementContext, ranges []*range
 // Index represents an index histogram.
 type Index struct {
 	Histogram
+	*SampleCol
 	*CMSketch
 	ErrorRate
 	StatsVer       int64 // StatsVer is the version of the current stats, used to maintain compatibility
@@ -926,7 +934,7 @@ func (idx *Index) GetRowCount(sc *stmtctx.StatementContext, indexRanges []*range
 			if fullLen {
 				// At most 1 in this case.
 				if idx.Info.Unique {
-					totalCount += 1
+					totalCount++
 					continue
 				}
 				count, err := idx.equalRowCount(sc, lb, modifyCount)

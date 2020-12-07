@@ -68,6 +68,7 @@ type HistColl struct {
 	PhysicalID int64
 	Columns    map[int64]*Column
 	Indices    map[int64]*Index
+	Chunk      *chunk.Chunk
 	// Idx2ColumnIDs maps the index id to its column ids. It's used to calculate the selectivity in planner.
 	Idx2ColumnIDs map[int64][]int64
 	// ColID2IdxID maps the column id to index id whose first column is it. It's used to calculate the selectivity in planner.
@@ -321,6 +322,7 @@ func (coll *HistColl) ID2UniqueID(columns []*expression.Column) *HistColl {
 		Count:          coll.Count,
 		ModifyCount:    coll.ModifyCount,
 		Columns:        cols,
+		Chunk:          coll.Chunk,
 	}
 	return newColl
 }
@@ -376,6 +378,7 @@ func (coll *HistColl) GenerateHistCollFromColumnInfo(infos []*model.ColumnInfo, 
 		Indices:        newIdxHistMap,
 		ColID2IdxID:    colID2IdxID,
 		Idx2ColumnIDs:  idx2Columns,
+		Chunk:          coll.Chunk,
 	}
 	return newColl
 }

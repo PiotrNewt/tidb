@@ -809,6 +809,8 @@ func ValidateSetSystemVar(vars *SessionVars, name string, value string, scope Sc
 		if _, err := collate.GetCollationByName(value); err != nil {
 			return value, errors.Trace(err)
 		}
+	case TiDBOptimizerFastSampling:
+		return checkUInt64SystemVar(name, value, 0, 11, vars)
 	}
 	return value, nil
 }

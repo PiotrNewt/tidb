@@ -1302,3 +1302,13 @@ type analyzeResult struct {
 	Err             error
 	job             *statistics.AnalyzeJob
 }
+
+// UpdateSampleOO uesd to deal with import cylce
+func UpdateSampleOO(ctx sessionctx.Context, coll *statistics.HistColl) {
+	statesHandle := domain.GetDomain(ctx).StatsHandle()
+	statesHandle.UpdateSample(coll)
+}
+
+func init() {
+	statistics.UpdateSampeInCache = UpdateSampleOO
+}

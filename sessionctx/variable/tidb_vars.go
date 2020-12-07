@@ -425,6 +425,9 @@ const (
 
 	// TiDBMemoryUsageAlarmRatio indicates the alarm threshold when memory usage of the tidb-server exceeds.
 	TiDBMemoryUsageAlarmRatio = "tidb_memory_usage_alarm_ratio"
+
+	// tidb_optimizer_fast_sampling defines the level of fast sampling.
+	TiDBOptimizerFastSampling = "tidb_optimizer_fast_sampling"
 )
 
 // Default TiDB system variable values.
@@ -527,6 +530,7 @@ const (
 	DefTiDBEnableTelemetry             = true
 	DefTiDBEnableAmendPessimisticTxn   = false
 	DefTiDBEnableRateLimitAction       = true
+	DefTiDBOptimizerFastSampling       = 0
 )
 
 // Process global variables.

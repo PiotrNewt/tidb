@@ -256,6 +256,15 @@ func (h *Handle) updateStatsCache(newCache statsCache) {
 	h.statsCache.Unlock()
 }
 
+// UpdateSample used to update histColl in cacahe
+func (h *Handle) UpdateSample(coll *statistics.HistColl) {
+	oldCache := h.statsCache.Load().(statsCache)
+	newCache := oldCache.copy()
+	id := coll.PhysicalID
+	newCache.tables[id].HistColl = *coll
+	h.statsCache.Store(newCache)
+}
+
 func (sc statsCache) copy() statsCache {
 	newCache := statsCache{tables: make(map[int64]*statistics.Table, len(sc.tables)), version: sc.version}
 	for k, v := range sc.tables {
