@@ -160,6 +160,7 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 		if err != nil {
 			return nil, err
 		}
+		requestMLServer(logic)
 	}
 	return logic, err
 }
