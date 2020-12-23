@@ -475,10 +475,8 @@ github.com/pingcap/tipb v0.0.0-20200417094153-7316d94df1ee/go.mod h1:RtkHW8WbcNx
 github.com/pingcap/tipb v0.0.0-20200522051215-f31a15d98fce/go.mod h1:RtkHW8WbcNxj8lsbzjaILci01CtYnYbIkQhjyZWrWVI=
 github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3 h1:ESL3eIt1kUt8IMvR1011ejZlAyDcOzw89ARvVHvpD5k=
 github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3/go.mod h1:RtkHW8WbcNxj8lsbzjaILci01CtYnYbIkQhjyZWrWVI=
-github.com/piotrnewt/sdo v0.0.0-20201220053613-1cee5a1a5232 h1:gKsQg18cgp9xPCSgJHqvWSpxM0742Tc44FZUrJxgErg=
-github.com/piotrnewt/sdo v0.0.0-20201220053613-1cee5a1a5232/go.mod h1:WFhBMHKfgOXRimM1CBijBtqh7emdbolMbM5DI99LhD0=
-github.com/piotrnewt/sdo v0.0.0-20201220055829-bcf94e02ab33 h1:5Q/yPvm/cI4dQRZGHNOHZV/QiYbX1PEM2tFGRl2TIBA=
-github.com/piotrnewt/sdo v0.0.0-20201220055829-bcf94e02ab33/go.mod h1:WFhBMHKfgOXRimM1CBijBtqh7emdbolMbM5DI99LhD0=
+github.com/piotrnewt/sdo v0.0.0-20201223123001-961edfd45e2f h1:MiQR6VtGaIUUdfpoiAm3aiSsNbFyEvcg9KBSSWl2qbk=
+github.com/piotrnewt/sdo v0.0.0-20201223123001-961edfd45e2f/go.mod h1:WFhBMHKfgOXRimM1CBijBtqh7emdbolMbM5DI99LhD0=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

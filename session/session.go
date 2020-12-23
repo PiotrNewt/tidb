@@ -1220,10 +1220,15 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		}
 		s.currentPlan = stmt.Plan
 
+		// sql := stmt.Text
+		executionStartTime := time.Now()
 		// Step3: Execute the physical plan.
 		if recordSets, err = s.executeStatement(ctx, stmt, recordSets, multiQuery); err != nil {
+			plannercore.DoneThisQuery(-1, sql, s.sessionVars.StmtCtx.Tables)
 			return nil, err
 		}
+		executionTime := time.Since(executionStartTime)
+		plannercore.DoneThisQuery(executionTime.Seconds(), sql, s.sessionVars.StmtCtx.Tables)
 	}
 
 	if s.sessionVars.ClientCapability&mysql.ClientMultiResults == 0 && len(recordSets) > 1 {

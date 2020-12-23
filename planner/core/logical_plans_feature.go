@@ -6,12 +6,19 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
+	"time"
 
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	mlpb "github.com/piotrnewt/sdo/src/go-mlpb"
 	"google.golang.org/grpc"
 )
 
-func requestMLServer(logic LogicalPlan) {
+func requestMLServer(feature *Feature, sql string, isDone bool, reward int64) int {
+	if !isDone && feature == nil {
+		return 0
+	}
+
 	// ip and part should can be configured
 	connect, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
 	if err != nil {
@@ -19,18 +26,68 @@ func requestMLServer(logic LogicalPlan) {
 	}
 	defer connect.Close()
 
-	sctx := logic.SCtx()
-	sessionVars := sctx.GetSessionVars()
-	sql := sessionVars.StmtCtx.OriginalSQL
+	var plan string
+	if feature != nil {
+		plan = feature.plan
+	}
 
 	client := mlpb.NewAutoLogicalRulesApplyClient(connect)
 	response, err := client.GetNextApplyIdxRequest(
 		context.Background(),
 		&mlpb.NextApplyIdxRequest{
-			Sql: sql,
+			Sql:    sql,
+			Reward: reward,
+			Done:   isDone,
+			Plan:   plan,
+			Flag:   "",
 		})
 
-	fmt.Println(response.GetSql())
+	res := int(response.GetRuleIdx())
+	fmt.Println("ruleIdx: ", res)
+	return res
+}
+
+func randReword() int64 {
+	rand.Seed(time.Now().Unix())
+	return rand.Int63()
+}
+
+// DoneThisQuery send the time as reward and clean the state info
+func DoneThisQuery(durationTime float64, sql string, tables []stmtctx.TableEntry) {
+	time2Reward := func(t float64) int64 {
+		if t < 0 {
+			return int64(t) * 10
+		}
+		// reward = 1000 / v(ms)
+		return int64(50.00 / t)
+	}
+
+	if isSysQuery(tables) {
+		return
+	}
+
+	reward := time2Reward(durationTime)
+	_ = requestMLServer(nil, sql, true, reward)
+}
+
+// randString generate a random string with lence
+func randString(n int) string {
+	letterBytes := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	}
+	return string(b)
+}
+
+func getSQLByPlan(logic LogicalPlan) string {
+	if logic == nil {
+		return ""
+	}
+
+	sctx := logic.SCtx()
+	sessionVars := sctx.GetSessionVars()
+	return sessionVars.StmtCtx.OriginalSQL
 }
 
 // Feature represents logical plan feature.
@@ -38,9 +95,9 @@ type Feature struct {
 	plan string
 }
 
-// GetFeatureOFLogicalPlan scan the logical paln from top node to the buttom.
+// getFeatureOfLogicalPlan scan the logical paln from top node to the buttom.
 // it will return fearture of logical plan.
-func GetFeatureOFLogicalPlan(logic LogicalPlan) *Feature {
+func getFeatureOfLogicalPlan(logic LogicalPlan) *Feature {
 	return &Feature{
 		plan: serialize(&logic),
 	}

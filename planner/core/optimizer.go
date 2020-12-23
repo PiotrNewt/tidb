@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	utilhint "github.com/pingcap/tidb/util/hint"
 	"github.com/pingcap/tidb/util/set"
@@ -147,7 +148,7 @@ func postOptimize(sctx sessionctx.Context, plan PhysicalPlan) PhysicalPlan {
 	return plan
 }
 
-func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (LogicalPlan, error) {
+func generalLogicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (LogicalPlan, error) {
 	var err error
 	for i, rule := range optRuleList {
 		// The order of flags is same as the order of optRule in the list.
@@ -160,7 +161,63 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 		if err != nil {
 			return nil, err
 		}
-		requestMLServer(logic)
+	}
+	return logic, err
+}
+
+func getTablesFromPlan(logic LogicalPlan) []stmtctx.TableEntry {
+	if logic == nil {
+		return nil
+	}
+	sctx := logic.SCtx()
+	sessionVars := sctx.GetSessionVars()
+	return sessionVars.StmtCtx.Tables
+}
+
+func isSysQuery(tables []stmtctx.TableEntry) bool {
+	if tables == nil {
+		return true
+	}
+
+	systemDBs := []string{"mysql", "performance_schema", "informantion_schema", "metrics_schema", "user"}
+	for _, table := range tables {
+		for _, sysdb := range systemDBs {
+			if table.DB == sysdb {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (LogicalPlan, error) {
+	// if there is system query, we do the general logical optimize
+	tables := getTablesFromPlan(logic)
+	if isSysQuery(tables) {
+		return generalLogicalOptimize(ctx, flag, logic)
+	}
+
+	// do with the order from ml_server
+	var err error
+	count := 0
+	for count <= 13 {
+		var idx int
+		// some step we use general order
+		if count < 4 {
+			idx = count
+		} else {
+			feature := getFeatureOfLogicalPlan(logic)
+			idx = requestMLServer(feature, getSQLByPlan(logic), false, 0)
+		}
+		rule := optRuleList[idx]
+		count++
+		if flag&(1<<uint(idx)) == 0 || isLogicalRuleDisabled(rule) {
+			continue
+		}
+		logic, err = rule.optimize(ctx, logic)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return logic, err
 }
