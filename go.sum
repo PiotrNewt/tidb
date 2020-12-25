@@ -477,6 +477,8 @@ github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3 h1:ESL3eIt1kUt8IMvR10
 github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3/go.mod h1:RtkHW8WbcNxj8lsbzjaILci01CtYnYbIkQhjyZWrWVI=
 github.com/piotrnewt/sdo v0.0.0-20201223123001-961edfd45e2f h1:MiQR6VtGaIUUdfpoiAm3aiSsNbFyEvcg9KBSSWl2qbk=
 github.com/piotrnewt/sdo v0.0.0-20201223123001-961edfd45e2f/go.mod h1:WFhBMHKfgOXRimM1CBijBtqh7emdbolMbM5DI99LhD0=
+github.com/piotrnewt/sdo v0.0.0-20201224082653-b78ff2ef7ba2 h1:Oefkko4BE1Dt4qJTd26oJMx85BR2x7JeiDRoGu72Yv0=
+github.com/piotrnewt/sdo v0.0.0-20201224082653-b78ff2ef7ba2/go.mod h1:WFhBMHKfgOXRimM1CBijBtqh7emdbolMbM5DI99LhD0=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

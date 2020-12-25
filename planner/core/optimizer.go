@@ -203,20 +203,28 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 	for count <= 13 {
 		var idx int
 		// some step we use general order
-		if count < 4 {
+		if count < 4 || count > 11 {
 			idx = count
 		} else {
 			feature := getFeatureOfLogicalPlan(logic)
-			idx = requestMLServer(feature, getSQLByPlan(logic), false, 0)
+			if idx = requestMLServer(feature, getSQLByPlan(logic), false, 0.0); idx == 0 {
+				idx = count
+			}
 		}
 		rule := optRuleList[idx]
 		count++
 		if flag&(1<<uint(idx)) == 0 || isLogicalRuleDisabled(rule) {
+			if count == 12 {
+				sendFinalPlan(logic)
+			}
 			continue
 		}
 		logic, err = rule.optimize(ctx, logic)
 		if err != nil {
 			return nil, err
+		}
+		if count == 12 {
+			sendFinalPlan(logic)
 		}
 	}
 	return logic, err

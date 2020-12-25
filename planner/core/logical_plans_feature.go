@@ -14,13 +14,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-func requestMLServer(feature *Feature, sql string, isDone bool, reward int64) int {
+func requestMLServer(feature *Feature, sql string, isDone bool, latency float64) int {
 	if !isDone && feature == nil {
 		return 0
 	}
 
 	// ip and part should can be configured
-	connect, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	connect, err := grpc.Dial("127.0.0.1:50051", grpc.WithInsecure())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,16 +35,21 @@ func requestMLServer(feature *Feature, sql string, isDone bool, reward int64) in
 	response, err := client.GetNextApplyIdxRequest(
 		context.Background(),
 		&mlpb.NextApplyIdxRequest{
-			Sql:    sql,
-			Reward: reward,
-			Done:   isDone,
-			Plan:   plan,
-			Flag:   "",
+			Sql:     sql,
+			Latency: latency,
+			Done:    isDone,
+			Plan:    plan,
+			Flag:    "",
 		})
 
 	res := int(response.GetRuleIdx())
 	fmt.Println("ruleIdx: ", res)
 	return res
+}
+
+func sendFinalPlan(logic LogicalPlan) {
+	final := getFeatureOfLogicalPlan(logic)
+	_ = requestMLServer(final, getSQLByPlan(logic), true, 0.0)
 }
 
 func randReword() int64 {
@@ -53,21 +58,12 @@ func randReword() int64 {
 }
 
 // DoneThisQuery send the time as reward and clean the state info
-func DoneThisQuery(durationTime float64, sql string, tables []stmtctx.TableEntry) {
-	time2Reward := func(t float64) int64 {
-		if t < 0 {
-			return int64(t) * 10
-		}
-		// reward = 1000 / v(ms)
-		return int64(50.00 / t)
-	}
-
+func DoneThisQuery(latency float64, sql string, tables []stmtctx.TableEntry) {
 	if isSysQuery(tables) {
 		return
 	}
-
-	reward := time2Reward(durationTime)
-	_ = requestMLServer(nil, sql, true, reward)
+	_ = requestMLServer(nil, sql, true, latency)
+	fmt.Println("ml sql done")
 }
 
 // randString generate a random string with lence
