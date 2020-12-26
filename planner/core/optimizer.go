@@ -207,7 +207,7 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 			idx = count
 		} else {
 			feature := getFeatureOfLogicalPlan(logic)
-			if idx = requestMLServer(feature, getSQLByPlan(logic), false, 0.0); idx == 0 {
+			if idx = requestMLServer(feature, getSQLByPlan(logic), false, 0.0, logic.SCtx().GetSessionVars(), count); idx == 0 {
 				idx = count
 			}
 		}
@@ -215,7 +215,7 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 		count++
 		if flag&(1<<uint(idx)) == 0 || isLogicalRuleDisabled(rule) {
 			if count == 12 {
-				sendFinalPlan(logic)
+				sendFinalPlan(logic, count)
 			}
 			continue
 		}
@@ -224,7 +224,7 @@ func logicalOptimize(ctx context.Context, flag uint64, logic LogicalPlan) (Logic
 			return nil, err
 		}
 		if count == 12 {
-			sendFinalPlan(logic)
+			sendFinalPlan(logic, count)
 		}
 	}
 	return logic, err

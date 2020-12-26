@@ -63,6 +63,7 @@ import (
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
+	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/plugin"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
@@ -1369,6 +1370,7 @@ func (cc *clientConn) handleIndexAdvise(ctx context.Context, indexAdviseInfo *ex
 // There is a special query `load data` that does not return result, which is handled differently.
 // Query `load stats` does not return result either.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
+	handleQueryStartTime := time.Now()
 	ctx = context.WithValue(ctx, execdetails.StmtExecDetailKey, &execdetails.StmtExecDetails{})
 	defer trace.StartRegion(ctx, "handleQuery").End()
 	rss, err := cc.ctx.Execute(ctx, sql)
@@ -1409,6 +1411,9 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 			}
 		}
 	}
+	handleQueryTime := time.Since(handleQueryStartTime)
+	// here to return the execution time of handle Query
+	plannercore.DoneThisQuery(handleQueryTime, sql, cc.ctx.GetSessionVars())
 	return err
 }
 

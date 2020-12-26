@@ -38,7 +38,7 @@ require (
 	github.com/pingcap/sysutil v0.0.0-20201130064824-f0c8aa6a6966
 	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
 	github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3
-	github.com/piotrnewt/sdo v0.0.0-20201224082653-b78ff2ef7ba2
+	github.com/piotrnewt/sdo v0.0.0-20201226123947-f5fd530febc9
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1

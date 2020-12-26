@@ -4,23 +4,22 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math/rand"
 	"time"
 
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	mlpb "github.com/piotrnewt/sdo/src/go-mlpb"
 	"google.golang.org/grpc"
 )
 
-func requestMLServer(feature *Feature, sql string, isDone bool, latency float64) int {
+func requestMLServer(feature *Feature, sql string, isDone bool, latency int64, sv *variable.SessionVars, stepIdx int) int {
 	if !isDone && feature == nil {
 		return 0
 	}
 
 	// ip and part should can be configured
-	connect, err := grpc.Dial("127.0.0.1:50051", grpc.WithInsecure())
+	connect, err := grpc.Dial("127.0.0.1:56066", grpc.WithInsecure())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,21 +34,24 @@ func requestMLServer(feature *Feature, sql string, isDone bool, latency float64)
 	response, err := client.GetNextApplyIdxRequest(
 		context.Background(),
 		&mlpb.NextApplyIdxRequest{
-			Sql:     sql,
-			Latency: latency,
-			Done:    isDone,
-			Plan:    plan,
-			Flag:    "",
+			Sql:            sql,
+			Latency:        latency,
+			ParserLatency:  int64(sv.DurationParse),
+			CompileLatency: int64(sv.DurationCompile),
+			Done:           isDone,
+			Plan:           plan,
+			Flag:           "",
+			StepIdx:        int64(stepIdx),
 		})
 
 	res := int(response.GetRuleIdx())
-	fmt.Println("ruleIdx: ", res)
+	// fmt.Println("ruleIdx: ", res)
 	return res
 }
 
-func sendFinalPlan(logic LogicalPlan) {
+func sendFinalPlan(logic LogicalPlan, stepIdx int) {
 	final := getFeatureOfLogicalPlan(logic)
-	_ = requestMLServer(final, getSQLByPlan(logic), true, 0.0)
+	_ = requestMLServer(final, getSQLByPlan(logic), true, 0.0, logic.SCtx().GetSessionVars(), stepIdx)
 }
 
 func randReword() int64 {
@@ -58,12 +60,12 @@ func randReword() int64 {
 }
 
 // DoneThisQuery send the time as reward and clean the state info
-func DoneThisQuery(latency float64, sql string, tables []stmtctx.TableEntry) {
-	if isSysQuery(tables) {
+func DoneThisQuery(latency time.Duration, sql string, sv *variable.SessionVars) {
+	if isSysQuery(sv.StmtCtx.Tables) {
 		return
 	}
-	_ = requestMLServer(nil, sql, true, latency)
-	fmt.Println("ml sql done")
+	_ = requestMLServer(nil, sql, true, int64(latency), sv, -1)
+	// fmt.Println("ml sql done")
 }
 
 // randString generate a random string with lence
