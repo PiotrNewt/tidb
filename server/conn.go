@@ -1376,6 +1376,8 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
 		metrics.ExecuteErrorCounter.WithLabelValues(metrics.ExecuteErrorToLabel(err)).Inc()
+		// if we get some errors when execute query, we set a negative reward which will be processed in ml-server.
+		plannercore.DoneThisQuery(-1, sql, cc.ctx.GetSessionVars())
 		return err
 	}
 	status := atomic.LoadInt32(&cc.status)
