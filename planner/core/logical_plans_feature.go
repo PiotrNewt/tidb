@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func requestMLServer(feature *Feature, sql string, isDone bool, latency int64, sv *variable.SessionVars, stepIdx int) int {
+func requestMLServer(feature *Feature, sql string, isDone bool, latency int64, sv *variable.SessionVars, stepIdx int, flag uint64) int {
 	if !isDone && feature == nil {
 		return 0
 	}
@@ -28,6 +28,7 @@ func requestMLServer(feature *Feature, sql string, isDone bool, latency int64, s
 	var plan string
 	if feature != nil {
 		plan = feature.plan
+		// fmt.Println(plan)
 	}
 
 	client := mlpb.NewAutoLogicalRulesApplyClient(connect)
@@ -40,7 +41,7 @@ func requestMLServer(feature *Feature, sql string, isDone bool, latency int64, s
 			CompileLatency: int64(sv.DurationCompile),
 			Done:           isDone,
 			Plan:           plan,
-			Flag:           "",
+			Flag:           flag,
 			StepIdx:        int64(stepIdx),
 		})
 
@@ -49,9 +50,9 @@ func requestMLServer(feature *Feature, sql string, isDone bool, latency int64, s
 	return res
 }
 
-func sendFinalPlan(logic LogicalPlan, stepIdx int) {
+func sendFinalPlan(logic LogicalPlan, stepIdx int, flag uint64) {
 	final := getFeatureOfLogicalPlan(logic)
-	_ = requestMLServer(final, getSQLByPlan(logic), true, 0.0, logic.SCtx().GetSessionVars(), stepIdx)
+	_ = requestMLServer(final, getSQLByPlan(logic), true, 0.0, logic.SCtx().GetSessionVars(), stepIdx, flag)
 }
 
 func randReword() int64 {
@@ -64,7 +65,7 @@ func DoneThisQuery(latency time.Duration, sql string, sv *variable.SessionVars) 
 	if isSysQuery(sv.StmtCtx.Tables) {
 		return
 	}
-	_ = requestMLServer(nil, sql, true, int64(latency), sv, -1)
+	_ = requestMLServer(nil, sql, true, int64(latency), sv, -1, 0)
 	// fmt.Println("ml sql done")
 }
 
